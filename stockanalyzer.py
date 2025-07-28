@@ -9,34 +9,19 @@ import yfinance as yf
 from bs4 import BeautifulSoup
 import time
 import logging
+import traceback
 
-# EXE için özel yol ayarları
-def get_base_path():
-    """EXE ve normal çalıştırma için uygun base path döndür"""
-    if getattr(sys, 'frozen', False):
-        # PyInstaller ile derlenmiş .exe dosyası
-        return os.path.dirname(sys.executable)
-    else:
-        # Normal Python scripti
-        return os.path.dirname(os.path.abspath(__file__))
-
-def get_temp_path():
-    """Geçici dosyalar için güvenli path"""
-    if getattr(sys, 'frozen', False):
-        # EXE modunda sistem temp klasörünü kullan
-        return os.path.join(os.environ.get('TEMP', os.path.expanduser('~')), 'VerissStockAnalyzer')
-    else:
-        return os.path.join(get_base_path(), 'temp')
-
-# Log dosyası için güvenli yol
-log_path = os.path.join(get_temp_path(), "stock_analyzer.log")
-os.makedirs(os.path.dirname(log_path), exist_ok=True)
-
-logging.basicConfig(
-    filename=log_path,
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
+# Logging setup with better error handling
+try:
+    logging.basicConfig(
+        filename="stock_analyzer.log",
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
+    print("✅ Logging initialized")
+except Exception as e:
+    print(f"⚠️ Could not initialize logging: {e}")
+    # Continue without logging if it fails
 
 def resolve_name_to_dataroma_code(name):
     name = name.strip().lower()
@@ -145,53 +130,27 @@ def get_buffett_top_holdings_data():
             data.append([ticker, "Error", "N/A", "N/A", "N/A"])
     return data
 
-class ModernStockAnalyzer:
+class StockAnalyzer:
     def __init__(self):
-        self.base_path = get_base_path()
-        self.temp_path = get_temp_path()
-        os.makedirs(self.temp_path, exist_ok=True)
-        
-        self.setup_model_path()
+        print("🔧 Initializing Stock Analyzer...")
         self.model = None
         self.model_loading = False
-        self.setup_modern_ui()
-        self.load_model()
-
-    def setup_model_path(self):
-        """EXE uyumlu model yolu belirleme"""
-        possible_paths = [
-            # EXE ile aynı klasördeki models klasörü
-            os.path.join(self.base_path, "models", "orca-mini-3b-gguf2-q4_0.gguf"),
-            os.path.join(self.base_path, "models", "mistral-7b-openorca.Q4_0.gguf"),
-            os.path.join(self.base_path, "models", "nous-hermes-llama2-13b.Q4_0.gguf"),
-            
-            # EXE ile aynı klasör
-            os.path.join(self.base_path, "orca-mini-3b-gguf2-q4_0.gguf"),
-            os.path.join(self.base_path, "mistral-7b-openorca.Q4_0.gguf"),
-            os.path.join(self.base_path, "nous-hermes-llama2-13b.Q4_0.gguf"),
-            
-            # Kullanıcı belgeler klasörü
-            os.path.join(os.path.expanduser("~"), "Documents", "VerissModels", "orca-mini-3b-gguf2-q4_0.gguf"),
-            os.path.join(os.path.expanduser("~"), "Documents", "VerissModels", "mistral-7b-openorca.Q4_0.gguf"),
-            
-            # GPT4All varsayılan konumlar
-            os.path.join(os.path.expanduser("~"), ".cache", "gpt4all", "orca-mini-3b-gguf2-q4_0.gguf"),
-            os.path.join(os.path.expanduser("~"), "AppData", "Local", "nomic.ai", "GPT4All", "orca-mini-3b-gguf2-q4_0.gguf"),
-            
-            # Original path (development)
-            r"C:\Users\lenovo\build\gpt4all\gpt4all-bindings\python\orca-mini-3b-gguf2-q4_0.gguf",
-        ]
+        self.model_loaded = False
         
-        self.model_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                self.model_path = path
-                print(f"✅ Model found: {path}")
-                logging.info(f"Model found: {path}")
-                return
-        
-        print("❌ Model file not found!")
-        logging.warning("No model file found in any of the expected locations")
+        try:
+            print("🎨 Setting up user interface...")
+            self.setup_ui()
+            print("✅ UI setup complete")
+            
+            print("🤖 Starting model loading...")
+            self.load_model()
+            print("✅ Initialization complete")
+            
+        except Exception as e:
+            print(f"❌ Error during initialization: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def load_model(self):
         if self.model_loading:
@@ -200,167 +159,132 @@ class ModernStockAnalyzer:
         self.model_loading = True
         
         def load_in_background():
-            try:
-                if not self.model_path:
-                    self.window.after(0, lambda: self.handle_model_not_found())
+           
+                # Common model paths for development environment
+                possible_paths = [
+                    "models/orca-mini-3b-gguf2-q4_0.gguf",
+                    "models/mistral-7b-openorca.Q4_0.gguf",
+                    "models/nous-hermes-llama2-13b.Q4_0.gguf",
+                    os.path.join(os.path.expanduser("~"), ".cache", "gpt4all", "orca-mini-3b-gguf2-q4_0.gguf"),
+                    os.path.join(os.path.expanduser("~"), "Documents", "GPT4All", "orca-mini-3b-gguf2-q4_0.gguf"),
+                ]
+                
+                model_path = None
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        model_path = path
+                        break
+                
+                if not model_path:
+                    print("⚠️ No local model found. AI analysis will be limited.")
+                    self.window.after(0, lambda: self.update_status("⚠️ No AI Model", "#FFA502"))
+                    self.model_loaded = False
                     return
                 
-                print(f"🔄 Loading model: {self.model_path}")
-                logging.info(f"Starting model load: {self.model_path}")
+                print(f"🔄 Loading model: {model_path}")
                 self.window.after(0, lambda: self.update_status("🔄 Loading AI Model...", "#FFA502"))
                 
-                # Model yükleme denemeleri
-                try:
-                    # İlk deneme: Doğrudan path ile
-                    self.model = GPT4All(self.model_path, allow_download=False, device='cpu')
-                    logging.info("Model loaded successfully with direct path")
-                except Exception as e1:
-                    print(f"First attempt failed: {e1}")
-                    logging.warning(f"First load attempt failed: {e1}")
-                    try:
-                        # İkinci deneme: Model adı ve klasör ile
-                        model_name = os.path.basename(self.model_path)
-                        model_dir = os.path.dirname(self.model_path)
-                        self.model = GPT4All(model_name, model_path=model_dir, allow_download=False, device='cpu')
-                        logging.info("Model loaded successfully with name and directory")
-                    except Exception as e2:
-                        print(f"Second attempt failed: {e2}")
-                        logging.warning(f"Second load attempt failed: {e2}")
-                        try:
-                            # Üçüncü deneme: Temp klasöre kopyala ve yükle
-                            temp_model_path = os.path.join(self.temp_path, os.path.basename(self.model_path))
-                            if not os.path.exists(temp_model_path):
-                                import shutil
-                                print("Copying model to temp directory...")
-                                shutil.copy2(self.model_path, temp_model_path)
-                            
-                            self.model = GPT4All(temp_model_path, allow_download=False, device='cpu')
-                            logging.info("Model loaded successfully from temp directory")
-                        except Exception as e3:
-                            print(f"Third attempt failed: {e3}")
-                            logging.error(f"All model load attempts failed: {e3}")
-                            raise e3
+                # Load with more conservative settings for stability
+                self.model = GPT4All(
+                    model_path, 
+                    allow_download=False, 
+                    device='cpu',
+                )
+                try:    
+                    # Test the model with very simple prompt
+                    print("🧪 Testing model...")
+                    test_response = self.model.generate("Hi", max_tokens=3, temp=0.1)
+                    print(f"✅ Model test successful: '{test_response.strip()}'")
                 
-                # Model test
-                print("🧪 Testing model...")
-                test_response = self.model.generate("Test", max_tokens=5, temp=0.1)
-                print(f"✅ Model test successful: {test_response}")
-                logging.info(f"Model test successful: {test_response}")
+                    self.model_loaded = True
+                    self.window.after(0, lambda: self.update_status("✅ AI Model Ready!", "#00D084"))
                 
-                self.window.after(0, lambda: self.update_status("✅ AI Model Ready!", "#00D084"))
-                self.window.after(0, lambda: self.show_model_ready_message())
-                
-            except Exception as e:
-                error_msg = str(e)
-                print(f"❌ Model loading error: {error_msg}")
-                logging.error(f"Model loading error: {error_msg}")
-                self.window.after(0, lambda: self.update_status("❌ AI Model Error", "#FF4757"))
-                self.window.after(0, lambda: self.show_model_error(error_msg))
-            finally:
-                self.model_loading = False
+                except Exception as e:
+                    print(f"❌ Model loading error: {e}")
+                    print("Full traceback:")
+                    traceback.print_exc()
+                    logging.error(f"Model loading error: {e}")
+                    logging.error(traceback.format_exc())
+                    self.model_loaded = False
+                    self.model = None
+                    self.window.after(0, lambda: self.update_status("❌ AI Model Error", "#FF4757"))
+                finally:
+                    self.model_loading = False
 
         threading.Thread(target=load_in_background, daemon=True).start()
 
-    def handle_model_not_found(self):
-        self.update_status("❌ Model Not Found", "#FF4757")
-        
-        # EXE için özel yönergeler
-        exe_path = self.base_path if getattr(sys, 'frozen', False) else "script directory"
-        
-        msg = f"""🤖 GPT4All Model Required!
-
-Model file not found. For EXE version, please follow these steps:
-
-1️⃣ Download a model from https://gpt4all.io/index.html
-2️⃣ Create a 'models' folder next to the EXE file
-3️⃣ Place the .gguf file in the models folder
-
-📁 Recommended locations:
-• {exe_path}\\models\\model_name.gguf
-• {os.path.expanduser('~')}\\Documents\\VerissModels\\model_name.gguf
-
-🔥 Popular models:
-• mistral-7b-openorca.Q4_0.gguf (7GB) - RECOMMENDED
-• orca-mini-3b-gguf2-q4_0.gguf (2GB) - Faster
-• nous-hermes-llama2-13b.Q4_0.gguf (7GB) - Advanced
-
-⚡ The app will work without a model but AI analysis won't be available!
-📊 Basic stock data and portfolio tracking still works perfectly!"""
-        
-        messagebox.showinfo("AI Model Required", msg)
-
-    def show_model_error(self, error_msg):
-        msg = f"""🚫 AI Model Loading Error!
-
-Error: {error_msg}
-
-🔧 EXE-specific solutions:
-1️⃣ Make sure the model file is in 'models' folder next to EXE
-2️⃣ Check file permissions (right-click → Properties → Security)
-3️⃣ Run EXE as Administrator
-4️⃣ Disable antivirus temporarily during first run
-5️⃣ Try a different model file
-6️⃣ Make sure path has no special characters
-
-📁 Expected structure:
-YourApp.exe
-└── models/
-    └── model_name.gguf
-
-💡 Basic analysis is still available without the model!"""
-        
-        messagebox.showerror("Model Error", msg)
-
-    def show_model_ready_message(self):
-        current_text = self.result_text.get(1.0, tk.END)
-        if "🤖 AI Status:" in current_text:
-            lines = current_text.split('\n')
-            for i, line in enumerate(lines):
-                if "🤖 AI Status:" in line:
-                    lines[i] = "🤖 AI Status: ✅ Model ready - You can now use AI analysis!"
-                    break
-            
-            self.result_text.delete(1.0, tk.END)
-            self.result_text.insert(1.0, '\n'.join(lines))
-
-    def setup_modern_ui(self):
-        self.window = tk.Tk()
-        self.window.title("🚀 Veriss Stock Analyzer - AI Powered (EXE Version)")
-        self.window.geometry("1400x800")
-        self.window.configure(bg="#0F0F23")
-        self.window.resizable(True, True)
-        
-        self.colors = {
-            'bg_primary': '#0F0F23',
-            'bg_secondary': '#1A1A3E',
-            'bg_card': '#242450',
-            'accent': '#00D084',
-            'accent_hover': '#00B86B',
-            'text_primary': '#FFFFFF',
-            'text_secondary': '#A0A0A0',
-            'danger': '#FF4757',
-            'warning': '#FFA502',
-            'info': '#3742FA'
-        }
-        
-        # İkon yükleme - EXE uyumlu
+    def setup_ui(self):
         try:
-            icon_path = os.path.join(self.base_path, "icon.ico")
-            if os.path.exists(icon_path):
-                self.window.iconbitmap(default=icon_path)
-        except:
-            pass
+            print("🪟 Creating main window...")
+            self.window = tk.Tk()
+            self.window.title("🚀 Stock Analyzer - AI Powered")
+            self.window.geometry("1400x800")
+            self.window.configure(bg="#0F0F23")
+            self.window.resizable(True, True)
+            
+            # Prevent window from closing unexpectedly
+            self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
+            
+            print("🎨 Setting up color scheme...")
+            self.colors = {
+                'bg_primary': '#0F0F23',
+                'bg_secondary': '#1A1A3E',
+                'bg_card': '#242450',
+                'accent': '#00D084',
+                'accent_hover': '#00B86B',
+                'text_primary': '#FFFFFF',
+                'text_secondary': '#A0A0A0',
+                'danger': '#FF4757',
+                'warning': '#FFA502',
+                'info': '#3742FA'
+            }
 
-        main_container = tk.Frame(self.window, bg=self.colors['bg_primary'])
-        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+            print("📦 Creating main container...")
+            main_container = tk.Frame(self.window, bg=self.colors['bg_primary'])
+            main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        self.create_header(main_container)
-        
-        content_frame = tk.Frame(main_container, bg=self.colors['bg_primary'])
-        content_frame.pack(fill=tk.BOTH, expand=True, pady=(20, 0))
-        
-        self.create_left_panel(content_frame)
-        self.create_right_panel(content_frame)
+            print("📋 Creating header...")
+            self.create_header(main_container)
+            
+            print("📊 Creating content frame...")
+            content_frame = tk.Frame(main_container, bg=self.colors['bg_primary'])
+            content_frame.pack(fill=tk.BOTH, expand=True, pady=(20, 0))
+            
+            print("⬅️ Creating left panel...")
+            self.create_left_panel(content_frame)
+            
+            print("➡️ Creating right panel...")
+            self.create_right_panel(content_frame)
+            
+            print("✅ UI setup completed successfully")
+            
+        except Exception as e:
+            print(f"❌ Error setting up UI: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
+    def on_closing(self):
+        """Handle window closing event properly"""
+        try:
+            print("🛑 Closing application...")
+            # Clean up model if loaded
+            if hasattr(self, 'model') and self.model:
+                try:
+                    # Try to properly close the model
+                    del self.model
+                    self.model = None
+                    print("✅ Model cleaned up")
+                except:
+                    pass
+            
+            if hasattr(self, 'window'):
+                self.window.quit()
+                self.window.destroy()
+        except Exception as e:
+            print(f"Error during closing: {e}")
+        finally:
+            sys.exit(0)
 
     def create_header(self, parent):
         header_frame = tk.Frame(parent, bg=self.colors['bg_secondary'], height=80)
@@ -370,12 +294,9 @@ YourApp.exe
         title_frame = tk.Frame(header_frame, bg=self.colors['bg_secondary'])
         title_frame.pack(expand=True, fill=tk.BOTH)
         
-        # EXE version indicator
-        exe_indicator = " (EXE)" if getattr(sys, 'frozen', False) else " (DEV)"
-        
         title_label = tk.Label(
             title_frame,
-            text=f"🚀 Veriss Stock Analyzer{exe_indicator}",
+            text="🚀 Stock Analyzer",
             font=("Segoe UI", 24, "bold"),
             bg=self.colors['bg_secondary'],
             fg=self.colors['text_primary']
@@ -521,16 +442,12 @@ YourApp.exe
         )
         self.result_text.pack(fill=tk.BOTH, expand=True)
         
-        # EXE version için özel welcome mesajı
-        version_info = "EXE Version" if getattr(sys, 'frozen', False) else "Development Version"
-        model_status = f"Model Path: {self.model_path}" if self.model_path else "Model: Not Found"
-        
-        welcome_msg = f"""🎯 Welcome to Veriss Stock Analyzer! ({version_info})
+        welcome_msg = f"""🎯 Welcome to Stock Analyzer!
 
 ✨ FEATURES:
 • 🤖 Advanced AI-powered stock analysis
 • 📊 Real-time investor portfolio tracking  
-• 💼 Berkshire Hathaway holdings monitoring
+• 💼 Famous investor holdings monitoring
 • 🌐 Live market data integration
 • 📈 Interactive price charts
 
@@ -539,9 +456,9 @@ YourApp.exe
 2. Or enter famous investor name (Warren Buffett, Bill Gates, etc.)  
 3. Click 'AI ANALYZE' for AI-powered investment advice
 4. Use 'CHART' to visualize price trends
-5. Check Buffett's holdings on the right panel →
+5. Check sample portfolio on the right panel →
 
-🤖 AI Status: {model_status}
+💡 To use AI features, place a GPT4All model file in the 'models' folder
 ⚡ Pro Tip: Try "Warren Buffett" for full portfolio analysis!
 
 {'─' * 80}
@@ -650,7 +567,6 @@ YourApp.exe
                         self.buffett_tree.insert("", tk.END, values=row)
 
                 self.window.after(0, clear_and_populate)
-                self.window.after(0, lambda: self.update_status("✅ Holdings Loaded", self.colors['accent']))
             except Exception as e:
                 self.window.after(0, lambda: self.update_status("❌ Loading Failed", self.colors['danger']))
 
@@ -672,7 +588,7 @@ YourApp.exe
     def analyze_selected_buffett_stock(self):
         selection = self.buffett_tree.selection()
         if not selection:
-            messagebox.showwarning("No Selection", "Please select a stock from Buffett's portfolio!")
+            messagebox.showwarning("No Selection", "Please select a stock from the portfolio!")
             return
         item = self.buffett_tree.item(selection[0])
         ticker = item["values"][0]
@@ -702,7 +618,10 @@ YourApp.exe
                     self.analyze_single_stock(symbol.upper())
                     
             except Exception as e:
+                print(f"❌ Error in analyze_stock: {e}")
+                traceback.print_exc()
                 logging.error(f"Error in analyze_stock: {e}")
+                logging.error(traceback.format_exc())
                 self.window.after(0, lambda: self.display_error(f"Analysis failed: {str(e)}"))
             finally:
                 self.window.after(0, lambda: self.btn_analyze.config(state="normal", text="🤖 AI ANALYZE"))
@@ -718,15 +637,23 @@ YourApp.exe
                 
             company_info = self.get_company_info(symbol)
             
-            if self.model:
-                analysis = self.create_ai_analysis(symbol, stock_data, company_info)
+            # Always try AI analysis first if model is available
+            if self.model_loaded and self.model:
+                try:
+                    analysis = self.create_ai_analysis(symbol, stock_data, company_info)
+                except Exception as ai_error:
+                    print(f"❌ AI analysis failed, falling back to basic: {ai_error}")
+                    analysis = "❌ AI analysis failed. Showing basic analysis:\n\n" + self.create_basic_analysis(symbol, stock_data, company_info)
             else:
-                analysis = "⚠️ AI model not loaded. Showing basic data only.\n\n" + self.create_basic_analysis(symbol, stock_data, company_info)
+                analysis = "⚠️ AI model not available. Showing basic analysis:\n\n" + self.create_basic_analysis(symbol, stock_data, company_info)
       
             self.window.after(0, lambda: self.display_stock_analysis(symbol, stock_data, company_info, analysis))
             
         except Exception as e:
+            print(f"❌ Error analyzing single stock {symbol}: {e}")
+            traceback.print_exc()
             logging.error(f"Error analyzing single stock {symbol}: {e}")
+            logging.error(traceback.format_exc())
             self.window.after(0, lambda: self.display_error(f"{symbol} analysis failed: {str(e)}"))
 
     def analyze_investor_portfolio(self, investor_name, investor_code):
@@ -757,7 +684,10 @@ YourApp.exe
             self.window.after(0, lambda: self.display_portfolio_analysis(portfolio_text))
             
         except Exception as e:
+            print(f"❌ Error analyzing investor portfolio: {e}")
+            traceback.print_exc()
             logging.error(f"Error analyzing investor portfolio: {e}")
+            logging.error(traceback.format_exc())
             self.window.after(0, lambda: self.display_error(f"{investor_name} portfolio analysis failed: {str(e)}"))
 
     def create_basic_analysis(self, symbol, stock_data, company_info):
@@ -770,7 +700,6 @@ YourApp.exe
         analysis = "📈 BASIC TECHNICAL ANALYSIS:\n"
         analysis += "-" * 30 + "\n\n"
         
-        # Fiyat analizi
         if daily_change_percent > 5:
             analysis += "🟢 Strong upward momentum (+5% or more)\n"
         elif daily_change_percent > 2:
@@ -784,7 +713,6 @@ YourApp.exe
         else:
             analysis += "🔴 Significant decline (more than -5%)\n"
         
-        # Volatilite analizi
         day_range = stock_data['h'] - stock_data['l']
         range_percent = (day_range / current_price) * 100
         
@@ -796,7 +724,6 @@ YourApp.exe
         else:
             analysis += "Low volatility - Stable trading\n"
         
-        # Basit öneri
         analysis += "\n💡 BASIC RECOMMENDATION:\n"
         if daily_change_percent > 3:
             analysis += "⚠️ Consider taking profits if you own shares\n"
@@ -862,12 +789,6 @@ YourApp.exe
         error_text += "• Try a different symbol\n"
         error_text += "• Wait a moment and try again\n"
         
-        if getattr(sys, 'frozen', False):
-            error_text += "\n🔧 EXE-specific tips:\n"
-            error_text += "• Run as Administrator\n"
-            error_text += "• Check Windows Firewall settings\n"
-            error_text += "• Temporarily disable antivirus\n"
-        
         self.result_text.insert(tk.END, error_text)
 
     def get_stock_data(self, symbol):
@@ -913,44 +834,48 @@ YourApp.exe
         daily_change = current_price - previous_close
         daily_change_percent = (daily_change / previous_close) * 100
         
-        prompt = f"""You are a professional financial advisor. Based on the following stock data, provide a brief and clear analysis and give a simple investment recommendation: BUY, HOLD, or SELL. Briefly explain your reasoning, using only the given price data.
+        # Shorter, more focused prompt to prevent crashes
+        prompt = f"""YOU ARE A FINANCIAL ANALYST AI. GIVE A DETAILED ANALYSIS OF THE STOCK MARKET DATA BELOW. DONT USE TOO MUCH JARGON, BE CONCISE AND TO THE POINT.
 
-Symbol: {symbol}
-{f"Company: {company_info.get('name', '')}" if company_info.get('name') else ""}
-Current Price: ${current_price:.2f}
-Yesterday Price: ${previous_close:.2f}
-Today's Change: ${daily_change:.2f} ({daily_change_percent:+.2f}%)
-Day High: ${data['h']:.2f}
-Day Low: ${data['l']:.2f}
+Stock: {symbol}
+Price: ${current_price:.2f}
+Change: {daily_change_percent:+.1f}%
+High: ${data['h']:.2f}
+Low: ${data['l']:.2f}
 
-Provide analysis in English:"""
+Give a short analysis and recommendation (BUY/HOLD/SELL):"""
 
         try:
-            if not self.model:
+            if not self.model or not self.model_loaded:
                 return self.create_basic_analysis(symbol, data, company_info)
             
             print(f"🤖 Starting AI analysis: {symbol}")
             logging.info(f"Starting AI analysis for {symbol}")
             
+            # Use more conservative settings to prevent crashes
             response = self.model.generate(
                 prompt, 
-                max_tokens=400, 
-                temp=0.3,
-                top_p=0.9,
-                repeat_penalty=1.1
+                max_tokens=200,  # Reduced from 400
+                temp=0.1,        # Lower temperature for stability
+                top_p=0.8,       # More conservative
+                repeat_penalty=1.05,  # Reduced
+                 # Single thread for stability
             )
             
             analysis = response.strip()
-            if not analysis or len(analysis) < 20:
+            if not analysis or len(analysis) < 10:
                 logging.warning("AI response too short, falling back to basic analysis")
-                return f"❌ AI response too short!\n\n{self.create_basic_analysis(symbol, data, company_info)}"
+                return f"❌ AI response incomplete!\n\n{self.create_basic_analysis(symbol, data, company_info)}"
             
             print(f"✅ AI analysis completed: {len(analysis)} characters")
             logging.info(f"AI analysis completed successfully: {len(analysis)} characters")
             return analysis
             
         except Exception as e:
+            print(f"❌ Error generating AI analysis: {e}")
+            traceback.print_exc()
             logging.error(f"Error generating AI analysis: {e}")
+            logging.error(traceback.format_exc())
             return f"❌ AI Analysis Error: {str(e)}\n\n{self.create_basic_analysis(symbol, data, company_info)}"
 
     def plot_stock_price(self, symbol):
@@ -1000,38 +925,89 @@ Provide analysis in English:"""
             plt.show()
             
         except ImportError:
-            messagebox.showerror("Error", "Matplotlib library required for charts.\n\nFor EXE version, charts may not be available.\nBasic analysis is still fully functional!")
+            messagebox.showerror("Error", "Matplotlib library required for charts.\n\nInstall with: pip install matplotlib")
         except Exception as e:
             logging.error(f"Error creating chart: {e}")
             messagebox.showerror("Error", f"Could not create chart for {symbol}: {str(e)}")
 
     def run(self):
-        self.window.mainloop()
+        try:
+            print("🚀 Starting main application loop...")
+            self.window.mainloop()
+        except KeyboardInterrupt:
+            print("\n🛑 Application interrupted by user")
+        except Exception as e:
+            print(f"❌ Error in main loop: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            print("👋 Application main loop ended")
 
 
 if __name__ == "__main__":
     try:
-        print("🚀 Starting Veriss Stock Analyzer...")
-        print(f"Running mode: {'EXE' if getattr(sys, 'frozen', False) else 'Development'}")
-        print(f"Base path: {get_base_path()}")
-        print(f"Temp path: {get_temp_path()}")
+        print("🚀 Starting Stock Analyzer...")
+        print("📦 Checking dependencies...")
         
-        app = ModernStockAnalyzer()
+        # Check critical imports
+        try:
+            import tkinter as tk
+            print("✅ Tkinter OK")
+        except ImportError as e:
+            print(f"❌ Tkinter missing: {e}")
+            input("Press Enter to exit...")
+            sys.exit(1)
+            
+        try:
+            import yfinance as yf
+            print("✅ YFinance OK")
+        except ImportError as e:
+            print(f"❌ YFinance missing. Install with: pip install yfinance")
+            print(f"Error: {e}")
+            input("Press Enter to exit...")
+            sys.exit(1)
+            
+        try:
+            from bs4 import BeautifulSoup
+            print("✅ BeautifulSoup OK")
+        except ImportError as e:
+            print(f"❌ BeautifulSoup missing. Install with: pip install beautifulsoup4")
+            print(f"Error: {e}")
+            input("Press Enter to exit...")
+            sys.exit(1)
+            
+        try:
+            import requests
+            print("✅ Requests OK")
+        except ImportError as e:
+            print(f"❌ Requests missing. Install with: pip install requests")
+            print(f"Error: {e}")
+            input("Press Enter to exit...")
+            sys.exit(1)
+
+        print("🚀 All dependencies OK, starting application...")
+        
+        app = StockAnalyzer()
+        print("✅ Application initialized successfully")
         app.run()
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Application stopped by user")
     except Exception as e:
-        error_msg = f"❌ Could not start application: {e}"
+        error_msg = f"❌ Critical error starting application: {e}"
         print(error_msg)
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        print("Full traceback:")
+        traceback.print_exc()
         logging.error(error_msg)
-        
-        # EXE modunda hata dialog'u göster
-        if getattr(sys, 'frozen', False):
-            try:
-                import tkinter as tk
-                from tkinter import messagebox
-                root = tk.Tk()
-                root.withdraw()
-                messagebox.showerror("Startup Error", f"Application failed to start:\n\n{e}\n\nCheck the log file for details.")
-            except:
-                pass
-        
-        input("Press Enter to exit...")
+        logging.error(traceback.format_exc())
+        print("\n💡 Common solutions:")
+        print("1. Make sure all dependencies are installed:")
+        print("   pip install gpt4all yfinance beautifulsoup4 requests matplotlib")
+        print("2. Check your Python version (3.7+ required)")
+        print("3. Try running as administrator")
+        print("4. Check if any antivirus is blocking the app")
+        input("\nPress Enter to exit...")
+    finally:
+        print("👋 Application closed")
