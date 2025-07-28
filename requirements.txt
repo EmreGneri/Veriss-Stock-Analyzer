@@ -1,0 +1,6 @@
+gpt4all
+yfinance
+requests
+beautifulsoup4
+matplotlib
+tk
