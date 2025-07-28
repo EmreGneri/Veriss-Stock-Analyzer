@@ -1,56 +1,52 @@
-# 🚀 Veriss Stock Analyzer
+# Veriss Stock Analyzer
 
-**AI-Powered Stock Analysis Desktop App**
+Veriss Stock Analyzer is a desktop app that helps you analyze stock data and see what top investors like Warren Buffett are holding. It's simple, clean, and powered by a local AI model (GPT4All).
 
-A modern GUI application that allows users to analyze stocks, track investor portfolios (like Warren Buffett), and get investment recommendations using an embedded local LLM (GPT4All).
+## What it does
 
-## ✨ Features
+- Shows real-time stock data like price, change, volume, and more
+- Uses a local GPT4All model to give simple investment advice (Buy, Hold, or Sell)
+- Lets you explore famous investors’ portfolios from Dataroma
+- Plots 30-day stock price charts
+- Runs on a modern desktop interface built with Tkinter
 
-- 📈 Real-time stock data from Yahoo Finance
-- 🤖 Local AI-based investment analysis using GPT4All
-- 💼 Analyze famous investor portfolios from Dataroma
-- 📊 Interactive stock price chart (last 30 days)
-- 🖥️ Beautiful modern interface with Tkinter
+## Getting started
 
----
+### 1. Clone the project
 
-## 🔧 Installation
-
-### 1. Clone the Repository
-
-```bash
+```
 git clone https://github.com/EmreGneri/Veriss-Stock-Analyzer.git
 cd Veriss-Stock-Analyzer
 ```
 
-### 2. Install Dependencies
+### 2. Install the required libraries
 
-```bash
+```
 pip install -r requirements.txt
 ```
 
-### 3. Download GPT4All Model
+### 3. Add a GPT4All model
 
-- Visit: https://gpt4all.io/index.html
-- Download a `.gguf` model (e.g., `mistral-7b-openorca.Q4_0.gguf` or `orca-mini-3b-gguf2-q4_0.gguf`)
-- Place the model file inside a folder named `models/` next to the `.py` file
+- Download a .gguf model from: https://gpt4all.io
+  - Suggested models:
+    - mistral-7b-openorca.Q4_0.gguf
+    - orca-mini-3b-gguf2-q4_0.gguf
 
-### 4. Run the App
+- Create a folder named `models` in the project root
+- Put your downloaded .gguf file inside that folder
 
-```bash
+### 4. Run the application
+
+```
 python stockanalyzer.py
 ```
 
----
+## Example inputs
 
-## 💡 Example Inputs
+- Stock symbols: AAPL, MSFT, TSLA
+- Investor names: Warren Buffett, Bill Gates, Michael Burry
 
-- Stock symbols: `AAPL`, `MSFT`, `TSLA`
-- Investor names: `Warren Buffett`, `Bill Gates`, `Ray Dalio`
-
----
-
-## 📁 Folder Structure
+## Folder structure
 
 ```
 Veriss-Stock-Analyzer/
@@ -58,19 +54,15 @@ Veriss-Stock-Analyzer/
 ├── requirements.txt
 ├── README.md
 └── models/
-    └── mistral-7b-openorca.Q4_0.gguf  # or any other GPT4All model
+    └── mistral-7b-openorca.Q4_0.gguf
 ```
 
----
+## Notes
 
-## ❗ Notes
+- The app can work without a model file, but AI analysis will be disabled
+- The AI model runs locally – no internet needed for analysis
+- You can package this into a Windows executable using tools like PyInstaller
 
-- AI model is optional: if no `.gguf` is found, app falls back to basic analysis
-- No data is sent online; LLM runs locally
-- Windows `.exe` support via PyInstaller is possible
+## License
 
----
-
-## 📜 License
-
-MIT License – free to use, modify, and distribute.
+MIT – Free to use, modify, and share.
