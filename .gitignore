@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+ml/data_cache/
+ml/saved_models/
+models/
+stock_analyzer.log
+twelvedata_key.txt
+finnhub_key.txt
