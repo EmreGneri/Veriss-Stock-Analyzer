@@ -56,9 +56,24 @@ function esc(s) {
 
 function showLoading(msg) {
   $("results-body").innerHTML = `
-    <div class="spinner-container">
-      <span class="spinner"></span>
-      <span>${esc(msg)}</span>
+    <div class="skeleton">
+      <div class="skeleton-block">
+        <div class="skeleton-line w40"></div>
+        <div class="skeleton-line w90"></div>
+        <div class="skeleton-line w70"></div>
+      </div>
+      <div class="skeleton-block">
+        <div class="skeleton-line tall"></div>
+        <div class="skeleton-line w70"></div>
+        <div class="skeleton-line w40"></div>
+      </div>
+      <div class="skeleton-block">
+        <div class="skeleton-line w40"></div>
+        <div class="skeleton-line w90"></div>
+        <div class="skeleton-line w90"></div>
+        <div class="skeleton-line w70"></div>
+      </div>
+      <p class="skeleton-note">${esc(msg)}</p>
     </div>`;
 }
 
@@ -195,7 +210,7 @@ function renderStock(d) {
             <span class="confidence-value">${probPct}% P(Up)</span>
           </div>
           <div class="confidence-track">
-            <div class="confidence-bar ${cls}" style="width: ${probPct}%"></div>
+            <div class="confidence-bar ${cls}" style="transform: scaleX(${s.probability_up.toFixed(3)})"></div>
           </div>
         </div>
       </div>

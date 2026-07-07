@@ -6,7 +6,7 @@
 <title>Veriss Stock Analyzer — AI & ML Market Intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
@@ -47,11 +47,11 @@
       <div class="hint-row">
         <div class="hint-tags">
           <span class="hint-label">Quick search:</span>
-          <span class="hint-tag" data-query="AAPL">AAPL</span>
-          <span class="hint-tag" data-query="MSFT">MSFT</span>
-          <span class="hint-tag" data-query="TSLA">TSLA</span>
-          <span class="hint-tag" data-query="Warren Buffett">Warren Buffett</span>
-          <span class="hint-tag" data-query="Michael Burry">Michael Burry</span>
+          <button type="button" class="hint-tag" data-query="AAPL">AAPL</button>
+          <button type="button" class="hint-tag" data-query="MSFT">MSFT</button>
+          <button type="button" class="hint-tag" data-query="TSLA">TSLA</button>
+          <button type="button" class="hint-tag" data-query="Warren Buffett">Warren Buffett</button>
+          <button type="button" class="hint-tag" data-query="Michael Burry">Michael Burry</button>
         </div>
         <label class="toggle-switch">
           <input type="checkbox" id="use-llm">
@@ -63,7 +63,7 @@
 
     <div class="card" id="results">
       <h2>Analysis</h2>
-      <div id="results-body" class="results-body">
+      <div id="results-body" class="results-body" aria-live="polite">
         <div class="welcome-container">
           <div class="welcome-pulse" id="welcome-pulse">
             <div class="welcome-pulse-head">

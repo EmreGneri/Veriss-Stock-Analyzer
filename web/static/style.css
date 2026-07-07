@@ -78,7 +78,7 @@ body::before {
   font-weight: 800;
   color: rgba(16, 185, 129, 0.025);
   pointer-events: none;
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   user-select: none;
   line-height: 1;
   z-index: -1;
@@ -148,13 +148,11 @@ header {
 }
 
 .brand-name {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--text) 30%, var(--primary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text);
 }
 
 .brand-sub {
@@ -253,7 +251,7 @@ main {
 }
 
 .card h2 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   font-size: 16px;
   font-weight: 700;
   color: var(--text);
@@ -360,11 +358,12 @@ input[type="text"]:focus + .search-icon {
 }
 
 .hint-tag {
+  font-family: inherit;
   font-size: 11px;
   font-weight: 600;
   background: #f1f5f9;
   border: 1px solid var(--border);
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 50px;
   cursor: pointer;
   color: var(--dim);
@@ -458,7 +457,7 @@ input[type="text"]:focus + .search-icon {
 
 .btn-primary {
   background: var(--primary);
-  color: var(--text-on-primary);
+  color: #06281d; /* beyaz #10b981 üstünde 2.5:1'de kalıyordu; koyu metin AA'yı geçer */
   box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3);
 }
 
@@ -538,7 +537,7 @@ input[type="text"]:focus + .search-icon {
 }
 
 .welcome-header h3 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   font-size: 18px;
   font-weight: 700;
   color: var(--text);
@@ -614,7 +613,7 @@ input[type="text"]:focus + .search-icon {
 }
 
 .result-section-title {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -659,7 +658,7 @@ input[type="text"]:focus + .search-icon {
 }
 
 .price-main {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   font-size: 28px;
   font-weight: 800;
   color: var(--text);
@@ -680,7 +679,7 @@ input[type="text"]:focus + .search-icon {
 }
 
 .signal-badge {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   font-size: 16px;
   font-weight: 800;
   padding: 8px 24px;
@@ -690,20 +689,21 @@ input[type="text"]:focus + .search-icon {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
+/* Rozet zeminleri koyu tonlar: beyaz metin AA kontrastı ancak böyle geçiyor */
 .signal-badge.buy {
-  background: var(--gain);
+  background: #047857;
   color: #ffffff;
   box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
 }
 
 .signal-badge.sell {
-  background: var(--loss);
+  background: #b91c1c;
   color: #ffffff;
   box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
 }
 
 .signal-badge.hold {
-  background: var(--neutral);
+  background: #b45309;
   color: #ffffff;
   box-shadow: 0 4px 15px rgba(245, 158, 11, 0.25);
 }
@@ -740,7 +740,9 @@ input[type="text"]:focus + .search-icon {
 .confidence-bar {
   height: 100%;
   border-radius: 10px;
-  transition: width 1s ease-out;
+  width: 100%;
+  transform-origin: left;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .confidence-bar.buy { background: var(--gain); }
@@ -995,9 +997,7 @@ header {
 }
 
 .status {
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.7);
 }
 
@@ -1012,17 +1012,13 @@ input[type="text"]:focus {
 }
 
 .hint-tag {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--border);
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--border);
 }
 
 .btn-ghost:hover {
@@ -1031,33 +1027,27 @@ input[type="text"]:focus {
 }
 
 .result-section {
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.result-section:nth-child(2) { animation-delay: 0.06s; }
-.result-section:nth-child(3) { animation-delay: 0.12s; }
-.result-section:nth-child(4) { animation-delay: 0.18s; }
+.result-section:nth-child(2) { animation-delay: 0.04s; }
+.result-section:nth-child(3) { animation-delay: 0.08s; }
+.result-section:nth-child(4) { animation-delay: 0.12s; }
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .feature-item {
-  background: rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(255, 255, 255, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
 .period-btns {
-  background: rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(255, 255, 255, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.65);
 }
 
@@ -1071,8 +1061,6 @@ tbody tr:hover {
 
 .error-box {
   background: rgba(239, 68, 68, 0.07);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .confidence-track {
@@ -1086,19 +1074,16 @@ tbody tr:hover {
 }
 
 /* ML sinyalinin yazılı gerekçesi */
+/* Kenarlıksız tonlu bölge: kart içinde kart görünümünden kaçınmak için */
 .ml-explanation {
   margin-top: 18px;
-  background: rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-left: 3px solid var(--primary);
+  background: var(--primary-bg);
   border-radius: var(--radius-sm);
   padding: 14px 16px;
 }
 
 .ml-explanation-title {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1163,9 +1148,79 @@ tbody tr:hover {
 @media (prefers-reduced-motion: reduce) {
   .result-section,
   .welcome-graphic,
-  .hero-frame {
+  .hero-frame,
+  .pulse-dot::after,
+  .dot::after,
+  .skeleton-line {
     animation: none;
   }
+}
+
+/* ================================================================
+   Erişilebilirlik ve durum katmanı
+   ================================================================ */
+
+/* Küçük metinlerde WCAG AA kontrast: #94a3b8 (2.8:1) yetersizdi */
+.dim,
+.welcome-footer,
+.hint-label {
+  color: #64748b;
+}
+
+input[type="text"]::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
+/* Klavye odak halkası - tüm etkileşimli öğelerde tutarlı */
+button:focus-visible,
+input[type="text"]:focus-visible,
+.toggle-switch input:focus-visible + .slider {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Skeleton yükleme durumu (spinner yerine) */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.skeleton-block {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+              rgba(15, 23, 42, 0.06) 25%,
+              rgba(15, 23, 42, 0.12) 50%,
+              rgba(15, 23, 42, 0.06) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w70 { width: 70%; }
+.skeleton-line.w90 { width: 90%; }
+.skeleton-line.tall { height: 26px; width: 55%; }
+
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
+.skeleton-note {
+  font-size: 12.5px;
+  color: #64748b;
+  text-align: center;
 }
 
 /* ---------- Greek Mythology Visual Enhancements ---------- */
@@ -1255,7 +1310,7 @@ tbody tr:hover {
 }
 
 .oracle-title h3 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: inherit;
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
