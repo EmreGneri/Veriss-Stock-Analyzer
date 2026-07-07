@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veriss Stock Analyzer — AI & ML Market Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo-wrapper">
+      <img src="greek_coin_logo.jpg" alt="Veriss Coin Logo" class="logo-img">
+    </div>
+    <div class="brand-title">
+      <span class="brand-name">Veriss</span>
+      <span class="brand-sub">Stock Analyzer</span>
+    </div>
+  </div>
+  <div class="status">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-text">Connecting...</span>
+  </div>
+</header>
+
+<main>
+  <section class="left">
+
+    <div class="card search-card">
+      <label class="field-label" for="query">Symbol or investor name</label>
+      <div class="input-row">
+        <div class="input-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input id="query" type="text" placeholder="AAPL, TSLA, Warren Buffett..." autocomplete="off">
+        </div>
+        <button id="btn-analyze" class="btn btn-primary">Analyze</button>
+      </div>
+      
+      <div class="hint-row">
+        <div class="hint-tags">
+          <span class="hint-label">Quick search:</span>
+          <span class="hint-tag" data-query="AAPL">AAPL</span>
+          <span class="hint-tag" data-query="MSFT">MSFT</span>
+          <span class="hint-tag" data-query="TSLA">TSLA</span>
+          <span class="hint-tag" data-query="Warren Buffett">Warren Buffett</span>
+          <span class="hint-tag" data-query="Michael Burry">Michael Burry</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="use-llm">
+          <span class="slider"></span>
+          <span class="toggle-label">LLM commentary (slower)</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card" id="results">
+      <h2>Analysis</h2>
+      <div id="results-body" class="results-body">
+        <div class="welcome-container">
+          <div class="welcome-pulse" id="welcome-pulse">
+            <div class="welcome-pulse-head">
+              <span class="pulse-dot"></span>
+              <span id="welcome-pulse-label">Market pulse — loading...</span>
+            </div>
+            <div class="welcome-pulse-canvas"><canvas id="welcome-pulse-chart"></canvas></div>
+          </div>
+          <div class="welcome-header">
+            <h3>Welcome to Veriss Stock Analyzer</h3>
+          </div>
+          <p class="welcome-text">
+            Enter a stock symbol or a famous investor name and press <strong>Analyze</strong> or use one of the quick search tags above.
+          </p>
+          <div class="welcome-features">
+            <div class="feature-item">
+              <div class="feature-badge">ML</div>
+              <p>RandomForest model trained on 5 years of daily price history evaluates trend signal.</p>
+            </div>
+            <div class="feature-item">
+              <div class="feature-badge">LLM</div>
+              <p>Generates detailed natural language market commentary when enabled.</p>
+            </div>
+          </div>
+          <p class="welcome-footer">
+            Note: First analysis of a new symbol trains a fresh model and can take about a minute.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card chart-card" id="chart-card" hidden>
+      <div class="chart-head">
+        <h2 id="chart-title">Price history</h2>
+        <div class="period-btns" id="period-btns">
+          <button data-period="5d">5D</button>
+          <button data-period="1mo" class="active">1M</button>
+          <button data-period="3mo">3M</button>
+          <button data-period="6mo">6M</button>
+          <button data-period="1y">1Y</button>
+        </div>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="chart" height="110"></canvas>
+      </div>
+    </div>
+
+  </section>
+
+  <aside class="right">
+    <div class="card portfolio-card">
+      <div class="card-head">
+        <h2>Sample portfolio</h2>
+        <button id="btn-refresh" class="btn btn-ghost">Refresh</button>
+      </div>
+      <div class="table-container">
+        <table id="portfolio-table">
+          <thead>
+            <tr><th>Symbol</th><th>Company</th><th class="num">Price</th><th class="num">P/E</th><th class="num">Cap</th></tr>
+          </thead>
+          <tbody><tr><td colspan="5" class="dim">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
