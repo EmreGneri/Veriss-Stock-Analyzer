@@ -1000,20 +1000,38 @@ Short analysis and a one-word stance (BUY/HOLD/SELL):"""
             messagebox.showwarning("Missing input", "Enter a stock symbol first.")
             return
 
+        # Veri çekimi ağa bağlı ve saniyeler sürebilir; UI thread'inde yapılırsa
+        # pencere donar. Çekim arka planda, matplotlib çizimi ise Tkinter ile
+        # aynı ana thread'de (window.after) kalmak zorunda.
+        self.btn_plot.config(state="disabled", text="Loading...")
+
+        def fetch_in_background():
+            try:
+                try:
+                    from data import fetch_history
+                    hist = fetch_history(symbol.upper(), period="1mo")
+                except ImportError:
+                    hist = yf.Ticker(symbol.upper()).history(period="1mo")
+                self.window.after(0, lambda: self._draw_chart(symbol, hist))
+            except Exception as e:
+                logging.error(f"Chart data fetch failed for {symbol}: {e}")
+                self.window.after(0, lambda: messagebox.showerror(
+                    "Error", f"Could not load data for {symbol}: {e}"))
+            finally:
+                self.window.after(0, lambda: self.btn_plot.config(
+                    state="normal", text="Chart"))
+
+        threading.Thread(target=fetch_in_background, daemon=True).start()
+
+    def _draw_chart(self, symbol, hist):
         try:
             import matplotlib.pyplot as plt
             import matplotlib.dates as mdates
+            import matplotlib.ticker as mticker
 
-            try:
-                from data import fetch_history
-                hist = fetch_history(symbol.upper(), period="1mo")
-            except ImportError:
-                hist = yf.Ticker(symbol.upper()).history(period="1mo")
             if hist.empty:
                 messagebox.showerror("Error", f"No data found for {symbol}")
                 return
-
-            import matplotlib.ticker as mticker
 
             first_close = hist["Close"].iloc[0]
             last_close  = hist["Close"].iloc[-1]
