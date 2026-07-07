@@ -1,6 +1,14 @@
-gpt4all
 yfinance
 requests
 beautifulsoup4
 matplotlib
-tk
+pandas
+numpy
+scikit-learn
+joblib
+
+# Optional: local LLM commentary in the desktop app
+# gpt4all
+
+fastapi
+uvicorn

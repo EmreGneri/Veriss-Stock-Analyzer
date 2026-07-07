@@ -1,27 +1,219 @@
 import sys
 import os
-from gpt4all import GPT4All
-import requests
-import tkinter as tk
-from tkinter import scrolledtext, messagebox, ttk
+
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ml"))
+
+try:
+    from gpt4all import GPT4All
+    GPT4ALL_AVAILABLE = True
+except ImportError:
+    GPT4ALL_AVAILABLE = False
+    print("[INFO] gpt4all not installed - LLM commentary disabled, ML signal still available")
+
+try:
+    from predict import get_ml_signal
+    ML_AVAILABLE = True
+except ImportError as e:
+    ML_AVAILABLE = False
+    print(f"[INFO] ML module unavailable: {e}")
+
 import threading
-import yfinance as yf
-from bs4 import BeautifulSoup
 import time
 import logging
 import traceback
 
-# Logging setup with better error handling
-try:
-    logging.basicConfig(
-        filename="stock_analyzer.log",
-        level=logging.DEBUG,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-    )
-    print("✅ Logging initialized")
-except Exception as e:
-    print(f"⚠️ Could not initialize logging: {e}")
-    # Continue without logging if it fails
+import requests
+import tkinter as tk
+from tkinter import scrolledtext, messagebox, ttk
+import yfinance as yf
+from bs4 import BeautifulSoup
+
+logging.basicConfig(
+    filename="stock_analyzer.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+
+C = {
+    "bg":            "#F4F7FA",  
+    "panel":         "#FFFFFF",  
+    "card":          "#FFFFFF",  
+    "card_shadow":   "#DDE3EC",  
+    "border":        "#E2E8F0",  
+    "accent":        "#059669", 
+    "accent_hover":  "#047857",  
+    "accent_light":  "#D1FAE5",  
+    "btn":           "#F1F5F9", 
+    "btn_hover":     "#E2E8F0", 
+    "text":          "#0F172A", 
+    "text2":         "#334155",  
+    "dim":           "#94A3B8",  
+    "red":           "#EF4444",  
+    "amber":         "#F59E0B",  
+
+   
+    "gain":          "#059669",  
+    "loss":          "#DC2626",  
+    "neutral":       "#D97706",  
+}
+
+FONT = "Segoe UI"
+MONO = "Consolas"
+
+
+def make_shadow_card(parent, bg=None, shadow=None, pad=3, **frame_kw):
+    """Simulates a drop shadow by layering a slightly darker outer frame."""
+    bg = bg or C["card"]
+    shadow = shadow or C["card_shadow"]
+    outer = tk.Frame(parent, bg=shadow, **frame_kw)
+    inner = tk.Frame(outer, bg=bg)
+    inner.pack(fill=tk.BOTH, expand=True, padx=(0, pad), pady=(0, pad))
+    return outer, inner
+
+
+class RoundedButton(tk.Canvas):
+    def __init__(self, parent, text, command, bg, hover_bg, fg,
+                 width=120, height=34, corner_radius=7,
+                 font=(FONT, 10, "bold"), state="normal"):
+        self.width = width
+        self.height = height
+        super().__init__(parent, width=width, height=height,
+                         bg=parent["bg"], highlightthickness=0)
+        self.command = command
+        self.bg_normal = bg
+        self.bg = bg
+        self.hover_bg = hover_bg
+        self.fg = fg
+        self.text = text
+        self.corner_radius = corner_radius
+        self.font = font
+        self.state = state
+
+        self.bind("<Enter>", self.on_enter)
+        self.bind("<Leave>", self.on_leave)
+        self.bind("<Button-1>", self.on_click)
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+        w, h, r = self.width, self.height, self.corner_radius
+        bg = C["border"] if self.state == "disabled" else self.bg
+        fg = C["dim"]   if self.state == "disabled" else self.fg
+        for coords, start in [
+            ((0, 0, r*2, r*2), 90),
+            ((w-r*2-1, 0, w-1, r*2), 0),
+            ((0, h-r*2-1, r*2, h-1), 180),
+            ((w-r*2-1, h-r*2-1, w-1, h-1), 270),
+        ]:
+            self.create_arc(coords, start=start, extent=90,
+                            fill=bg, outline=bg, tags="bg")
+        self.create_rectangle((r, 0, w-r, h), fill=bg, outline=bg, tags="bg")
+        self.create_rectangle((0, r, w, h-r), fill=bg, outline=bg, tags="bg")
+        self.create_text(w/2, h/2, text=self.text, fill=fg,
+                         font=self.font, tags="lbl")
+
+    def on_enter(self, event):
+        if self.state == "normal":
+            self.itemconfig("bg", fill=self.hover_bg, outline=self.hover_bg)
+
+    def on_leave(self, event):
+        if self.state == "normal":
+            self.itemconfig("bg", fill=self.bg, outline=self.bg)
+
+    def on_click(self, event):
+        if self.state == "normal" and self.command:
+            self.command()
+
+    def config(self, **kwargs):
+        if "state" in kwargs: self.state = kwargs["state"]
+        if "text"  in kwargs: self.text  = kwargs["text"]
+        if "bg"    in kwargs: self.bg    = kwargs["bg"]
+        if "hover" in kwargs: self.hover_bg = kwargs["hover"]
+        self.draw()
+
+    def configure(self, **kwargs):
+        self.config(**kwargs)
+
+
+class StatusLight(tk.Canvas):
+    """Small glowing LED status indicator."""
+    def __init__(self, parent, size=10):
+        super().__init__(parent, width=size, height=size,
+                         bg=parent["bg"], highlightthickness=0)
+        self.size = size
+        self.color = C["dim"]
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+        s = self.size
+        # Outer glow ring
+        self.create_oval(0, 0, s, s, fill=self.color, outline="", stipple="gray50")
+        # Inner solid dot
+        m = s // 4
+        self.create_oval(m, m, s-m, s-m, fill=self.color, outline="")
+
+    def set_color(self, color):
+        self.color = color
+        self.draw()
+
+
+class GridBackgroundCanvas(tk.Canvas):
+    def __init__(self, parent, bg_color, grid_color, trend_color):
+        super().__init__(parent, bg=bg_color, highlightthickness=0)
+        self.bg_color = bg_color
+        self.grid_color = grid_color
+        self.trend_color = trend_color
+        self.bind("<Configure>", self.draw_background)
+
+    def draw_background(self, event=None):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+        if w < 10 or h < 10:
+            return
+
+        
+        grid_size = 48
+        for x in range(0, w, grid_size):
+            self.create_line(x, 0, x, h, fill=self.grid_color, width=1)
+        for y in range(0, h, grid_size):
+            self.create_line(0, y, w, y, fill=self.grid_color, width=1)
+
+      
+        points = [
+            (0, h * 0.95),
+            (w * 0.15, h * 0.88),
+            (w * 0.30, h * 0.75),
+            (w * 0.45, h * 0.80),
+            (w * 0.60, h * 0.58),
+            (w * 0.75, h * 0.62),
+            (w * 0.90, h * 0.38),
+            (w, h * 0.30)
+        ]
+        
+        poly_points = [0, h]
+        for p in points:
+            poly_points.extend(p)
+        poly_points.extend([w, h])
+        
+        self.create_polygon(poly_points, fill=self.trend_color, outline="")
+        self.create_line(points, fill=self.grid_color, width=2, smooth=True)
+
+        
+        cx = w - 160
+        cy = h - 160
+        
+        # Arcs
+        self.create_arc(cx - 30, cy - 40, cx + 30, cy, start=0, extent=180, outline=self.grid_color, width=3, style=tk.ARC)
+        self.create_arc(cx - 30, cy, cx + 30, cy + 40, start=180, extent=180, outline=self.grid_color, width=3, style=tk.ARC)
+        # S middle line
+        self.create_line(cx - 30, cy, cx + 30, cy, fill=self.grid_color, width=3)
+        # S vertical bar
+        self.create_line(cx, cy - 60, cx, cy + 60, fill=self.grid_color, width=3)
+
 
 def resolve_name_to_dataroma_code(name):
     name = name.strip().lower()
@@ -65,6 +257,7 @@ def resolve_name_to_dataroma_code(name):
     }
     return name_map.get(name)
 
+
 def get_dataroma_portfolio(investor_code):
     if not investor_code:
         return []
@@ -72,12 +265,9 @@ def get_dataroma_portfolio(investor_code):
     url = f"https://www.dataroma.com/m/holdings.php?m={investor_code}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,/;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "DNT": "1",
         "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
     }
 
     try:
@@ -88,25 +278,21 @@ def get_dataroma_portfolio(investor_code):
         response = session.get(url, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
-        
+
         stock_links = soup.find_all("a", href=lambda x: x and "/m/stock.php?sym=" in str(x))
-        if stock_links:
-            tickers = []
-            for link in stock_links:
-                href = link.get("href", "")
-                if "sym=" in href:
-                    ticker = href.split("sym=")[1]
-                    if "&" in ticker:
-                        ticker = ticker.split("&")[0]
-                    ticker = ticker.strip().upper()
-                    if ticker and len(ticker) <= 6 and ticker not in tickers:
-                        tickers.append(ticker)
-            return tickers[:15]
-        return []
+        tickers = []
+        for link in stock_links:
+            href = link.get("href", "")
+            if "sym=" in href:
+                ticker = href.split("sym=")[1].split("&")[0].strip().upper()
+                if ticker and len(ticker) <= 6 and ticker not in tickers:
+                    tickers.append(ticker)
+        return tickers[:15]
 
     except Exception as e:
         logging.error(f"Error scraping Dataroma: {e}")
         return []
+
 
 def get_buffett_top_holdings_data():
     tickers = get_dataroma_portfolio("BRK") or [
@@ -126,716 +312,670 @@ def get_buffett_top_holdings_data():
             cap_str = f"${market_cap/1e9:.2f}B" if market_cap and market_cap >= 1e9 else "N/A"
             company_name = info.get("shortName", ticker)[:20]
             data.append([ticker, company_name, price_str, pe_str, cap_str])
-        except Exception as e:
+        except Exception:
             data.append([ticker, "Error", "N/A", "N/A", "N/A"])
     return data
 
+
 class StockAnalyzer:
     def __init__(self):
-        print("🔧 Initializing Stock Analyzer...")
+        print("[INFO] Initializing Stock Analyzer...")
         self.model = None
         self.model_loading = False
         self.model_loaded = False
+
+        self.setup_ui()
+        self.setup_tags()
         
+        # Display the formatted initial text
+        initial_text = (
+            "STOCK ANALYSIS: Veriss Stock Analyzer\n"
+            "===\n\n"
+            "Enter a stock symbol (AAPL, MSFT, TSLA) or a famous investor\n"
+            "name (Warren Buffett, Michael Burry) and press Analyze.\n\n"
+            "The ML signal comes from a RandomForest model trained on\n"
+            "5 years of daily price history. If a local LLM model is\n"
+            "installed, a short commentary is added on top.\n\n"
+            "First analysis of a new symbol trains a model and can take\n"
+            "about a minute.\n\n"
+            "Educational tool - not financial advice.\n"
+        )
+        self.insert_formatted_text(initial_text)
+        
+        self.load_model()
+        print("[OK] Initialization complete")
+
+    # ------------------------------------------------------------------ UI
+
+    def setup_ui(self):
+        self.window = tk.Tk()
+        self.window.title("Veriss Stock Analyzer")
+        self.window.geometry("1280x780")
+        self.window.configure(bg=C["bg"])
+        self.window.minsize(1000, 640)
+        self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self._apply_window_effects()
+
+        self.bg_canvas = GridBackgroundCanvas(
+            self.window, 
+            bg_color=C["bg"], 
+            grid_color="#EDF2F7", 
+            trend_color="#F1F5F9"
+        )
+        self.bg_canvas.pack(fill=tk.BOTH, expand=True)
+
+        root = tk.Frame(self.bg_canvas, bg=C["bg"])
+        root.pack(fill=tk.BOTH, expand=True, padx=24, pady=20)
+
+        self._build_header(root)
+
+        content = tk.Frame(root, bg=C["bg"])
+        content.pack(fill=tk.BOTH, expand=True, pady=(16, 0))
+
+        self._build_left_panel(content)
+        self._build_right_panel(content)
+
+    def _apply_window_effects(self):
+        """Pencere saydamlığı + Windows 11 Mica dokusu. Desteklenmeyen
+        sistemlerde sessizce atlanır, uygulama normal görünümde açılır."""
         try:
-            print("🎨 Setting up user interface...")
-            self.setup_ui()
-            print("✅ UI setup complete")
-            
-            print("🤖 Starting model loading...")
-            self.load_model()
-            print("✅ Initialization complete")
-            
+            self.window.attributes("-alpha", 0.97)
+        except tk.TclError:
+            pass
+        try:
+            import ctypes
+            self.window.update_idletasks()
+            hwnd = ctypes.windll.user32.GetParent(self.window.winfo_id())
+          
+            backdrop = ctypes.c_int(2)
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, 38, ctypes.byref(backdrop), ctypes.sizeof(backdrop))
+        except Exception:
+            pass
+
+    def _build_header(self, parent):
+        # Thin emerald accent bar at very top
+        accent_bar = tk.Frame(parent, bg=C["accent"], height=3)
+        accent_bar.pack(fill=tk.X)
+
+        header = tk.Frame(parent, bg=C["panel"])
+        header.pack(fill=tk.X)
+
+        title_box = tk.Frame(header, bg=C["panel"])
+        title_box.pack(side=tk.LEFT, padx=24, pady=14)
+
+        tk.Label(title_box, text="Veriss", font=(FONT, 20, "bold"),
+                 bg=C["panel"], fg=C["accent"]).pack(side=tk.LEFT)
+        tk.Label(title_box, text="  Stock Analyzer", font=(FONT, 13),
+                 bg=C["panel"], fg=C["dim"]).pack(side=tk.LEFT, pady=(5, 0))
+
+        status_box = tk.Frame(header, bg=C["panel"])
+        status_box.pack(side=tk.RIGHT, padx=24, pady=14)
+
+        self.status_light = StatusLight(status_box, size=10)
+        self.status_light.pack(side=tk.LEFT, padx=(0, 7))
+
+        self.status_label = tk.Label(status_box, text="",
+                                     font=(FONT, 9), bg=C["panel"], fg=C["dim"])
+        self.status_label.pack(side=tk.LEFT)
+        self.set_status("Starting...", C["dim"])
+
+        # Thin separator line
+        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X)
+
+    def _build_left_panel(self, parent):
+        left = tk.Frame(parent, bg=C["bg"])
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 14))
+
+        # --- Search card (shadow-simulated) ---
+        outer, inner_card = make_shadow_card(left, pad=2)
+        outer.pack(fill=tk.X, pady=(0, 14))
+
+        inner = tk.Frame(inner_card, bg=C["card"])
+        inner.pack(fill=tk.X, padx=22, pady=18)
+
+        tk.Label(inner, text="SYMBOL OR INVESTOR NAME",
+                 font=(FONT, 8, "bold"), bg=C["card"], fg=C["dim"]).pack(anchor=tk.W)
+
+        row = tk.Frame(inner, bg=C["card"])
+        row.pack(fill=tk.X, pady=(10, 6))
+
+        # Entry with smooth focus border
+        entry_wrap = tk.Frame(row, bg=C["border"], highlightthickness=0)
+        entry_wrap.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+
+        entry_inner = tk.Frame(entry_wrap, bg=C["card"])
+        entry_inner.pack(fill=tk.X, padx=1, pady=1)
+
+        self.entry_symbol = tk.Entry(
+            entry_inner, font=(FONT, 12), bg=C["card"], fg=C["text"],
+            insertbackground=C["accent"], relief="flat", bd=0
+        )
+        self.entry_symbol.pack(fill=tk.X, padx=12, pady=9)
+        self.entry_symbol.bind("<Return>", lambda e: self.analyze_stock())
+
+        def on_focus_in(e):
+            entry_wrap.config(bg=C["accent"])
+        def on_focus_out(e):
+            entry_wrap.config(bg=C["border"])
+        self.entry_symbol.bind("<FocusIn>", on_focus_in)
+        self.entry_symbol.bind("<FocusOut>", on_focus_out)
+
+        self.btn_analyze = self._button(
+            row, "Analyze", self.analyze_stock,
+            bg=C["accent"], hover=C["accent_hover"], fg=C["panel"]
+        )
+        self.btn_analyze.pack(side=tk.LEFT, padx=(0, 8))
+
+        self.btn_plot = self._button(
+            row, "Chart",
+            lambda: self.plot_stock_price(self.entry_symbol.get().strip()),
+            bg=C["btn"], hover=C["btn_hover"], fg=C["text2"]
+        )
+        self.btn_plot.pack(side=tk.LEFT)
+
+        tk.Label(inner, text="e.g.  AAPL  ·  MSFT  ·  TSLA  ·  Warren Buffett  ·  Michael Burry",
+                 font=(FONT, 8), bg=C["card"], fg=C["dim"]).pack(anchor=tk.W)
+
+        # --- Analysis report card (shadow-simulated) ---
+        outer2, results_card = make_shadow_card(left, pad=2)
+        outer2.pack(fill=tk.BOTH, expand=True)
+
+        # Header row with green left accent strip
+        hdr = tk.Frame(results_card, bg=C["card"])
+        hdr.pack(fill=tk.X, padx=0, pady=(0, 0))
+        tk.Frame(hdr, bg=C["accent"], width=4).pack(side=tk.LEFT, fill=tk.Y)
+        tk.Label(hdr, text="Analysis Report", font=(FONT, 10, "bold"),
+                 bg=C["card"], fg=C["text"]).pack(side=tk.LEFT, padx=14, pady=14)
+
+        tk.Frame(results_card, bg=C["border"], height=1).pack(fill=tk.X)
+
+        self.result_text = scrolledtext.ScrolledText(
+            results_card, wrap=tk.WORD, font=(MONO, 10),
+            bg=C["card"], fg=C["text2"], insertbackground=C["accent"],
+            relief="flat", bd=0,
+            selectbackground=C["accent_light"],
+            selectforeground=C["text"],
+            padx=18, pady=14,
+        )
+        self.result_text.pack(fill=tk.BOTH, expand=True, padx=0, pady=(0, 0))
+
+    def _build_right_panel(self, parent):
+        right = tk.Frame(parent, bg=C["bg"], width=384)
+        right.pack(side=tk.RIGHT, fill=tk.Y)
+        right.pack_propagate(False)
+
+        outer, card = make_shadow_card(right, pad=2)
+        outer.pack(fill=tk.BOTH, expand=True)
+
+        # Header row with green accent strip
+        hdr = tk.Frame(card, bg=C["card"])
+        hdr.pack(fill=tk.X)
+        tk.Frame(hdr, bg=C["accent"], width=4).pack(side=tk.LEFT, fill=tk.Y)
+        hdr_inner = tk.Frame(hdr, bg=C["card"])
+        hdr_inner.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=14, pady=14)
+
+        tk.Label(hdr_inner, text="Sample Portfolio", font=(FONT, 10, "bold"),
+                 bg=C["card"], fg=C["text"]).pack(side=tk.LEFT)
+
+        self.btn_refresh = self._button(
+            hdr_inner, "Refresh", self.refresh_buffett_data,
+            bg=C["btn"], hover=C["btn_hover"], fg=C["text2"]
+        )
+        self.btn_refresh.pack(side=tk.RIGHT)
+
+        tk.Frame(card, bg=C["border"], height=1).pack(fill=tk.X)
+
+        table_frame = tk.Frame(card, bg=C["card"])
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=14, pady=(10, 8))
+
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Veriss.Treeview",
+                        background=C["card"], foreground=C["text2"],
+                        fieldbackground=C["card"], borderwidth=0,
+                        rowheight=34, font=(FONT, 10))
+        style.configure("Veriss.Treeview.Heading",
+                        background=C["bg"], foreground=C["dim"],
+                        borderwidth=0, font=(FONT, 8, "bold"),
+                        relief="flat", padding=(4, 6))
+        style.map("Veriss.Treeview",
+                  background=[("selected", C["accent_light"])],
+                  foreground=[("selected", C["accent"])])
+
+        style.configure("Veriss.Vertical.TScrollbar",
+                        troughcolor=C["bg"], background=C["border"],
+                        bordercolor=C["bg"], arrowcolor=C["dim"],
+                        arrowsize=10, gripcount=0)
+        style.map("Veriss.Vertical.TScrollbar",
+                  background=[("active", C["btn_hover"])])
+
+        columns = ("Symbol", "Company", "Price", "P/E", "Cap")
+        self.buffett_tree = ttk.Treeview(table_frame, columns=columns,
+                                         show="headings", style="Veriss.Treeview")
+        widths = {"Symbol": 52, "Company": 118, "Price": 66, "P/E": 42, "Cap": 62}
+        for col in columns:
+            self.buffett_tree.heading(col, text=col.upper())
+            self.buffett_tree.column(col, anchor="center", width=widths.get(col, 60))
+
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical",
+                                  style="Veriss.Vertical.TScrollbar",
+                                  command=self.buffett_tree.yview)
+        self.buffett_tree.configure(yscrollcommand=scrollbar.set)
+        self.buffett_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        tk.Frame(card, bg=C["border"], height=1).pack(fill=tk.X)
+        btn = self._button(card, "Analyze Selected",
+                           self.analyze_selected_buffett_stock,
+                           bg=C["accent"], hover=C["accent_hover"], fg=C["panel"])
+        btn.pack(pady=14)
+
+        self.load_buffett_data()
+
+    def _button(self, parent, text, command, bg, hover, fg=None, padx=18, pady=8):
+        fg = fg or C["text"]
+        width = max(88, len(text) * 8 + 36)
+        height = 34
+        if text in ("Analyze Selected", "Analyze selected"):
+            width = 168
+        return RoundedButton(parent, text, command, bg=bg, hover_bg=hover,
+                             fg=fg, width=width, height=height)
+
+    def set_status(self, text, color):
+        """Thread-safe durum güncellemesi - her thread'den çağrılabilir."""
+        def apply():
+            self.status_label.config(text=text, fg=C["text"])
+            self.status_light.set_color(color)
+        try:
+            self.window.after(0, apply)
+        except RuntimeError:
+            pass  # pencere kapanırken gelen güncellemeleri yoksay
+
+    def on_closing(self):
+        try:
+            if self.model is not None:
+                self.model = None
+            self.window.quit()
+            self.window.destroy()
         except Exception as e:
-            print(f"❌ Error during initialization: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
+            logging.error(f"Error during closing: {e}")
+
+    def setup_tags(self):
+        self.result_text.tag_configure(
+            "title", font=(FONT, 14, "bold"), foreground=C["accent"],
+            spacing1=12, spacing3=6)
+        self.result_text.tag_configure(
+            "header", font=(FONT, 10, "bold"), foreground=C["text"],
+            spacing1=10, spacing3=3)
+        self.result_text.tag_configure(
+            "buy",  font=(MONO, 10, "bold"), foreground=C["gain"],
+            background=C["accent_light"])
+        self.result_text.tag_configure(
+            "sell", font=(MONO, 10, "bold"), foreground=C["loss"],
+            background="#FEE2E2")
+        self.result_text.tag_configure(
+            "hold", font=(MONO, 10, "bold"), foreground=C["neutral"],
+            background="#FEF3C7")
+        self.result_text.tag_configure("gain",    foreground=C["gain"])
+        self.result_text.tag_configure("loss",    foreground=C["loss"])
+        self.result_text.tag_configure("divider", foreground=C["border"])
+        self.result_text.tag_configure("muted",   foreground=C["dim"])
+
+    def insert_formatted_text(self, text):
+        self.result_text.config(state="normal")
+        self.result_text.delete(1.0, tk.END)
+
+        for line in text.split("\n"):
+            if line.startswith("STOCK ANALYSIS:") or line.startswith("PORTFOLIO:"):
+                self.result_text.insert(tk.END, line + "\n", "title")
+
+            elif line.strip() in {
+                "COMPANY", "PRICE",
+                "ML SIGNAL (RandomForest)", "TECHNICAL SUMMARY",
+                "COMMENTARY (LLM)", "COMMENTARY", "ERROR"
+            }:
+                self.result_text.insert(tk.END, line + "\n", "header")
+
+            elif line.startswith("---") or line.startswith("==="):
+                self.result_text.insert(tk.END, "─" * 48 + "\n", "divider")
+
+            else:
+                for word in line.split(" "):
+                    cw = word.strip().upper().rstrip(".,;:")
+                    if cw in ("BUY",):
+                        self.result_text.insert(tk.END, f" {word} ", "buy")
+                        self.result_text.insert(tk.END, " ")
+                    elif cw in ("SELL",):
+                        self.result_text.insert(tk.END, f" {word} ", "sell")
+                        self.result_text.insert(tk.END, " ")
+                    elif cw in ("HOLD",):
+                        self.result_text.insert(tk.END, f" {word} ", "hold")
+                        self.result_text.insert(tk.END, " ")
+                    elif "+" in word and any(c.isdigit() for c in word):
+                        self.result_text.insert(tk.END, word + " ", "gain")
+                    elif "-" in word and any(c.isdigit() for c in word) and ("%" in word or "$" in word):
+                        self.result_text.insert(tk.END, word + " ", "loss")
+                    else:
+                        self.result_text.insert(tk.END, word + " ")
+                self.result_text.insert(tk.END, "\n")
+
+        self.result_text.config(state="disabled")
+
+    # ----------------------------------------------------------- LLM model
 
     def load_model(self):
         if self.model_loading:
             return
-            
         self.model_loading = True
-        
+
         def load_in_background():
-           
-                # Common model paths for development environment
-                possible_paths = [
-                    "models/orca-mini-3b-gguf2-q4_0.gguf",
-                    "models/mistral-7b-openorca.Q4_0.gguf",
-                    "models/nous-hermes-llama2-13b.Q4_0.gguf",
+            try:
+                if not GPT4ALL_AVAILABLE:
+                    print("[INFO] GPT4All not installed; skipping LLM load.")
+                    self.set_status("ML signal mode (no LLM)", C["dim"])
+                    return
+
+                import glob
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                candidates = sorted(glob.glob(os.path.join(script_dir, "models", "*.gguf")))
+                candidates += [
                     os.path.join(os.path.expanduser("~"), ".cache", "gpt4all", "orca-mini-3b-gguf2-q4_0.gguf"),
                     os.path.join(os.path.expanduser("~"), "Documents", "GPT4All", "orca-mini-3b-gguf2-q4_0.gguf"),
                 ]
-                
-                model_path = None
-                for path in possible_paths:
-                    if os.path.exists(path):
-                        model_path = path
-                        break
-                
+                model_path = next((p for p in candidates if os.path.exists(p)), None)
+
                 if not model_path:
-                    print("⚠️ No local model found. AI analysis will be limited.")
-                    self.window.after(0, lambda: self.update_status("⚠️ No AI Model", "#FFA502"))
-                    self.model_loaded = False
+                    print("[WARN] No local LLM model found.")
+                    self.set_status("No LLM model - ML signal only", C["amber"])
                     return
-                
-                print(f"🔄 Loading model: {model_path}")
-                self.window.after(0, lambda: self.update_status("🔄 Loading AI Model...", "#FFA502"))
-                
-                # Load with more conservative settings for stability
-                self.model = GPT4All(
-                    model_path, 
-                    allow_download=False, 
-                    device='cpu',
-                )
-                try:    
-                    # Test the model with very simple prompt
-                    print("🧪 Testing model...")
-                    test_response = self.model.generate("Hi", max_tokens=3, temp=0.1)
-                    print(f"✅ Model test successful: '{test_response.strip()}'")
-                
-                    self.model_loaded = True
-                    self.window.after(0, lambda: self.update_status("✅ AI Model Ready!", "#00D084"))
-                
-                except Exception as e:
-                    print(f"❌ Model loading error: {e}")
-                    print("Full traceback:")
-                    traceback.print_exc()
-                    logging.error(f"Model loading error: {e}")
-                    logging.error(traceback.format_exc())
-                    self.model_loaded = False
-                    self.model = None
-                    self.window.after(0, lambda: self.update_status("❌ AI Model Error", "#FF4757"))
-                finally:
-                    self.model_loading = False
+
+                print(f"[INFO] Loading model: {model_path}")
+                self.set_status("Loading LLM model...", C["amber"])
+
+                try:
+                    self.model = GPT4All(model_path, allow_download=False, device="gpu")
+                    print("[OK] Model running on GPU")
+                except Exception as gpu_error:
+                    print(f"[INFO] GPU init failed ({gpu_error}); falling back to CPU")
+                    self.model = GPT4All(model_path, allow_download=False, device="cpu")
+
+                self.model.generate("Hi", max_tokens=2, temp=0.1)
+                self.model_loaded = True
+                print("[OK] LLM model ready")
+                self.set_status("Model ready", C["accent"])
+
+            except Exception as e:
+                print(f"[ERROR] LLM load failed: {e}")
+                logging.error(f"LLM load failed: {e}\n{traceback.format_exc()}")
+                self.model = None
+                self.model_loaded = False
+                self.set_status("LLM unavailable - ML signal only", C["red"])
+            finally:
+                self.model_loading = False
 
         threading.Thread(target=load_in_background, daemon=True).start()
 
-    def setup_ui(self):
-        try:
-            print("🪟 Creating main window...")
-            self.window = tk.Tk()
-            self.window.title("🚀 Stock Analyzer - AI Powered")
-            self.window.geometry("1400x800")
-            self.window.configure(bg="#0F0F23")
-            self.window.resizable(True, True)
-            
-            # Prevent window from closing unexpectedly
-            self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
-            
-            print("🎨 Setting up color scheme...")
-            self.colors = {
-                'bg_primary': '#0F0F23',
-                'bg_secondary': '#1A1A3E',
-                'bg_card': '#242450',
-                'accent': '#00D084',
-                'accent_hover': '#00B86B',
-                'text_primary': '#FFFFFF',
-                'text_secondary': '#A0A0A0',
-                'danger': '#FF4757',
-                'warning': '#FFA502',
-                'info': '#3742FA'
-            }
-
-            print("📦 Creating main container...")
-            main_container = tk.Frame(self.window, bg=self.colors['bg_primary'])
-            main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-
-            print("📋 Creating header...")
-            self.create_header(main_container)
-            
-            print("📊 Creating content frame...")
-            content_frame = tk.Frame(main_container, bg=self.colors['bg_primary'])
-            content_frame.pack(fill=tk.BOTH, expand=True, pady=(20, 0))
-            
-            print("⬅️ Creating left panel...")
-            self.create_left_panel(content_frame)
-            
-            print("➡️ Creating right panel...")
-            self.create_right_panel(content_frame)
-            
-            print("✅ UI setup completed successfully")
-            
-        except Exception as e:
-            print(f"❌ Error setting up UI: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
-
-    def on_closing(self):
-        """Handle window closing event properly"""
-        try:
-            print("🛑 Closing application...")
-            # Clean up model if loaded
-            if hasattr(self, 'model') and self.model:
-                try:
-                    # Try to properly close the model
-                    del self.model
-                    self.model = None
-                    print("✅ Model cleaned up")
-                except:
-                    pass
-            
-            if hasattr(self, 'window'):
-                self.window.quit()
-                self.window.destroy()
-        except Exception as e:
-            print(f"Error during closing: {e}")
-        finally:
-            sys.exit(0)
-
-    def create_header(self, parent):
-        header_frame = tk.Frame(parent, bg=self.colors['bg_secondary'], height=80)
-        header_frame.pack(fill=tk.X, pady=(0, 20))
-        header_frame.pack_propagate(False)
-        
-        title_frame = tk.Frame(header_frame, bg=self.colors['bg_secondary'])
-        title_frame.pack(expand=True, fill=tk.BOTH)
-        
-        title_label = tk.Label(
-            title_frame,
-            text="🚀 Stock Analyzer",
-            font=("Segoe UI", 24, "bold"),
-            bg=self.colors['bg_secondary'],
-            fg=self.colors['text_primary']
-        )
-        title_label.pack(side=tk.LEFT, padx=20, pady=20)
-        
-        subtitle_label = tk.Label(
-            title_frame,
-            text="🤖 Powered by GPT4All AI • 📊 Real-time Data • 💼 Professional Analysis",
-            font=("Segoe UI", 10),
-            bg=self.colors['bg_secondary'],
-            fg=self.colors['text_secondary']
-        )
-        subtitle_label.pack(side=tk.LEFT, padx=(0, 20), pady=(30, 10))
-        
-        self.status_frame = tk.Frame(header_frame, bg=self.colors['bg_secondary'])
-        self.status_frame.pack(side=tk.RIGHT, padx=20, pady=20)
-        
-        self.status_label = tk.Label(
-            self.status_frame,
-            text="🔄 Loading AI Model...",
-            font=("Segoe UI", 11, "bold"),
-            bg=self.colors['bg_secondary'],
-            fg=self.colors['warning']
-        )
-        self.status_label.pack()
-
-    def create_left_panel(self, parent):
-        left_panel = tk.Frame(parent, bg=self.colors['bg_primary'])
-        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 20))
-        
-        input_card = tk.Frame(left_panel, bg=self.colors['bg_card'], relief="flat", bd=0)
-        input_card.pack(fill=tk.X, pady=(0, 20))
-        
-        input_header = tk.Frame(input_card, bg=self.colors['bg_card'])
-        input_header.pack(fill=tk.X, padx=20, pady=(20, 10))
-        
-        tk.Label(
-            input_header,
-            text="📊 AI Stock Analysis",
-            font=("Segoe UI", 16, "bold"),
-            bg=self.colors['bg_card'],
-            fg=self.colors['text_primary']
-        ).pack(side=tk.LEFT)
-        
-        input_area = tk.Frame(input_card, bg=self.colors['bg_card'])
-        input_area.pack(fill=tk.X, padx=20, pady=(0, 20))
-        
-        tk.Label(
-            input_area,
-            text="Enter Stock Symbol or Investor Name:",
-            font=("Segoe UI", 12),
-            bg=self.colors['bg_card'],
-            fg=self.colors['text_secondary']
-        ).pack(anchor=tk.W, pady=(0, 8))
-        
-        input_frame = tk.Frame(input_area, bg=self.colors['bg_card'])
-        input_frame.pack(fill=tk.X, pady=(0, 15))
-        
-        self.entry_symbol = tk.Entry(
-            input_frame,
-            font=("Segoe UI", 14),
-            bg=self.colors['bg_primary'],
-            fg=self.colors['text_primary'],
-            insertbackground=self.colors['accent'],
-            relief="flat",
-            bd=0,
-            width=40
-        )
-        self.entry_symbol.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10), ipady=12)
-        self.entry_symbol.bind("<Return>", lambda e: self.analyze_stock())
-        
-        button_frame = tk.Frame(input_frame, bg=self.colors['bg_card'])
-        button_frame.pack(side=tk.RIGHT)
-        
-        self.btn_analyze = tk.Button(
-            button_frame,
-            text="🤖 AI ANALYZE",
-            command=self.analyze_stock,
-            font=("Segoe UI", 12, "bold"),
-            bg=self.colors['accent'],
-            fg="white",
-            relief="flat",
-            bd=0,
-            padx=25,
-            pady=12,
-            cursor="hand2"
-        )
-        self.btn_analyze.pack(side=tk.LEFT, padx=(0, 10))
-        
-        self.btn_plot = tk.Button(
-            button_frame,
-            text="📈 CHART",
-            command=lambda: self.plot_stock_price(self.entry_symbol.get().strip()),
-            font=("Segoe UI", 10, "bold"),
-            bg=self.colors['info'],
-            fg="white",
-            relief="flat",
-            bd=0,
-            padx=20,
-            pady=12,
-            cursor="hand2"
-        )
-        self.btn_plot.pack(side=tk.LEFT)
-        
-        examples_label = tk.Label(
-            input_area,
-            text="💡 Examples: AAPL, TSLA, MSFT, Warren Buffett, Bill Gates, Ray Dalio",
-            font=("Segoe UI", 9),
-            bg=self.colors['bg_card'],
-            fg=self.colors['text_secondary']
-        )
-        examples_label.pack(anchor=tk.W)
-        
-        results_card = tk.Frame(left_panel, bg=self.colors['bg_card'], relief="flat", bd=0)
-        results_card.pack(fill=tk.BOTH, expand=True)
-        
-        results_header = tk.Frame(results_card, bg=self.colors['bg_card'])
-        results_header.pack(fill=tk.X, padx=20, pady=(20, 10))
-        
-        tk.Label(
-            results_header,
-            text="🤖 AI Analysis Results",
-            font=("Segoe UI", 16, "bold"),
-            bg=self.colors['bg_card'],
-            fg=self.colors['text_primary']
-        ).pack(side=tk.LEFT)
-        
-        results_frame = tk.Frame(results_card, bg=self.colors['bg_card'])
-        results_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
-        
-        self.result_text = scrolledtext.ScrolledText(
-            results_frame,
-            wrap=tk.WORD,
-            font=("Cascadia Code", 10),
-            bg=self.colors['bg_primary'],
-            fg=self.colors['text_primary'],
-            insertbackground=self.colors['accent'],
-            relief="flat",
-            bd=0,
-            selectbackground=self.colors['accent'],
-            selectforeground="white"
-        )
-        self.result_text.pack(fill=tk.BOTH, expand=True)
-        
-        welcome_msg = f"""🎯 Welcome to Stock Analyzer!
-
-✨ FEATURES:
-• 🤖 Advanced AI-powered stock analysis
-• 📊 Real-time investor portfolio tracking  
-• 💼 Famous investor holdings monitoring
-• 🌐 Live market data integration
-• 📈 Interactive price charts
-
-🚀 HOW TO USE:
-1. Enter stock symbol (AAPL, GOOGL, TSLA, etc.)
-2. Or enter famous investor name (Warren Buffett, Bill Gates, etc.)  
-3. Click 'AI ANALYZE' for AI-powered investment advice
-4. Use 'CHART' to visualize price trends
-5. Check sample portfolio on the right panel →
-
-💡 To use AI features, place a GPT4All model file in the 'models' folder
-⚡ Pro Tip: Try "Warren Buffett" for full portfolio analysis!
-
-{'─' * 80}
-"""
-        self.result_text.insert(tk.END, welcome_msg)
-
-    def create_right_panel(self, parent):
-        right_panel = tk.Frame(parent, bg=self.colors['bg_primary'], width=400)
-        right_panel.pack(side=tk.RIGHT, fill=tk.Y)
-        right_panel.pack_propagate(False)
-        
-        holdings_card = tk.Frame(right_panel, bg=self.colors['bg_card'], relief="flat", bd=0)
-        holdings_card.pack(fill=tk.BOTH, expand=True)
-        
-        holdings_header = tk.Frame(holdings_card, bg=self.colors['bg_card'])
-        holdings_header.pack(fill=tk.X, padx=20, pady=(20, 15))
-        
-        tk.Label(
-            holdings_header,
-            text="💼 Sample Portfolio",
-            font=("Segoe UI", 16, "bold"),
-            bg=self.colors['bg_card'],
-            fg=self.colors['text_primary']
-        ).pack(side=tk.LEFT)
-        
-        self.btn_refresh = tk.Button(
-            holdings_header,
-            text="🔄",
-            command=self.refresh_buffett_data,
-            font=("Segoe UI", 12),
-            bg=self.colors['accent'],
-            fg="white",
-            relief="flat",
-            bd=0,
-            width=3,
-            height=1,
-            cursor="hand2"
-        )
-        self.btn_refresh.pack(side=tk.RIGHT)
-        
-        table_frame = tk.Frame(holdings_card, bg=self.colors['bg_card'])
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
-        
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("Modern.Treeview",
-                       background=self.colors['bg_primary'],
-                       foreground=self.colors['text_primary'],
-                       fieldbackground=self.colors['bg_primary'],
-                       borderwidth=0,
-                       font=("Segoe UI", 10))
-        style.configure("Modern.Treeview.Heading",
-                       background=self.colors['bg_secondary'],
-                       foreground=self.colors['text_primary'],
-                       font=("Segoe UI", 10, "bold"))
-        
-        columns = ("Symbol", "Company", "Price", "P/E", "Cap")
-        self.buffett_tree = ttk.Treeview(
-            table_frame,
-            columns=columns,
-            show="headings",
-            style="Modern.Treeview"
-        )
-        
-        column_widths = {"Symbol": 60, "Company": 120, "Price": 70, "P/E": 50, "Cap": 70}
-        for col in columns:
-            self.buffett_tree.heading(col, text=col)
-            self.buffett_tree.column(col, anchor="center", width=column_widths.get(col, 80))
-       
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.buffett_tree.yview)
-        self.buffett_tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.buffett_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        self.btn_analyze_buffett = tk.Button(
-            holdings_card,
-            text="🎯 Analyze Selected Stock",
-            command=self.analyze_selected_buffett_stock,
-            font=("Segoe UI", 11, "bold"),
-            bg=self.colors['info'],
-            fg="white",
-            relief="flat",
-            bd=0,
-            padx=20,
-            pady=12,
-            cursor="hand2"
-        )
-        self.btn_analyze_buffett.pack(pady=(0, 20))
-        
-        self.load_buffett_data()
-
-    def update_status(self, text, color):
-        self.status_label.config(text=text, fg=color)
+    # ------------------------------------------------------------ Portfolio
 
     def load_buffett_data(self):
         def load_data():
             try:
-                self.window.after(0, lambda: self.update_status("🔄 Loading Holdings...", self.colors['warning']))
+                self.set_status("Loading holdings...", C["amber"])
                 holdings = get_buffett_top_holdings_data()
 
-                def clear_and_populate():
+                def populate():
                     for item in self.buffett_tree.get_children():
                         self.buffett_tree.delete(item)
-                    for row in holdings:
-                        self.buffett_tree.insert("", tk.END, values=row)
+                    for row_values in holdings:
+                        self.buffett_tree.insert("", tk.END, values=row_values)
 
-                self.window.after(0, clear_and_populate)
+                self.window.after(0, populate)
+                self.set_status("Ready", C["accent"] if self.model_loaded else C["dim"])
             except Exception as e:
-                self.window.after(0, lambda: self.update_status("❌ Loading Failed", self.colors['danger']))
+                logging.error(f"Holdings load failed: {e}")
+                self.set_status("Holdings load failed", C["red"])
 
         threading.Thread(target=load_data, daemon=True).start()
 
     def refresh_buffett_data(self):
-        self.btn_refresh.config(state="disabled", text="⏳")
-        
+        self.btn_refresh.config(state="disabled", text="...")
+
         def refresh():
             try:
                 self.load_buffett_data()
-                time.sleep(2)
-                self.window.after(0, lambda: self.btn_refresh.config(state="normal", text="🔄"))
-            except:
-                self.window.after(0, lambda: self.btn_refresh.config(state="normal", text="🔄"))
+            finally:
+                self.window.after(0, lambda: self.btn_refresh.config(state="normal", text="Refresh"))
 
         threading.Thread(target=refresh, daemon=True).start()
 
     def analyze_selected_buffett_stock(self):
         selection = self.buffett_tree.selection()
         if not selection:
-            messagebox.showwarning("No Selection", "Please select a stock from the portfolio!")
+            messagebox.showwarning("No selection", "Select a stock from the portfolio first.")
             return
-        item = self.buffett_tree.item(selection[0])
-        ticker = item["values"][0]
+        ticker = self.buffett_tree.item(selection[0])["values"][0]
         self.entry_symbol.delete(0, tk.END)
         self.entry_symbol.insert(0, ticker)
         self.analyze_stock()
 
+    # -------------------------------------------------------------- Analysis
+
     def analyze_stock(self):
         symbol = self.entry_symbol.get().strip()
         if not symbol:
-            messagebox.showwarning("Warning", "Please enter a stock symbol or investor name!")
+            messagebox.showwarning("Missing input", "Enter a stock symbol or investor name.")
             return
-        
+
         self.result_text.delete(1.0, tk.END)
-        self.result_text.insert(tk.END, "🔄 Analyzing... Please wait...\n")
-        self.result_text.update()
-        
-        self.btn_analyze.config(state="disabled", text="⏳ ANALYZING...")
-        
+        self.result_text.insert(tk.END, "Analyzing... this can take a minute for a new symbol.\n")
+        self.btn_analyze.config(state="disabled", text="Analyzing...")
+
         def analyze_in_background():
             try:
                 investor_code = resolve_name_to_dataroma_code(symbol)
-                
                 if investor_code:
                     self.analyze_investor_portfolio(symbol, investor_code)
                 else:
                     self.analyze_single_stock(symbol.upper())
-                    
             except Exception as e:
-                print(f"❌ Error in analyze_stock: {e}")
-                traceback.print_exc()
-                logging.error(f"Error in analyze_stock: {e}")
-                logging.error(traceback.format_exc())
-                self.window.after(0, lambda: self.display_error(f"Analysis failed: {str(e)}"))
+                logging.error(f"Error in analyze_stock: {e}\n{traceback.format_exc()}")
+                self.window.after(0, lambda: self.display_error(f"Analysis failed: {e}"))
             finally:
-                self.window.after(0, lambda: self.btn_analyze.config(state="normal", text="🤖 AI ANALYZE"))
-        
+                self.window.after(0, lambda: self.btn_analyze.config(state="normal", text="Analyze"))
+
         threading.Thread(target=analyze_in_background, daemon=True).start()
 
     def analyze_single_stock(self, symbol):
-        try:
-            stock_data = self.get_stock_data(symbol)
-            if "error" in stock_data:
-                self.window.after(0, lambda: self.display_error(f"Could not get data for {symbol}: {stock_data['error']}"))
-                return
-                
-            company_info = self.get_company_info(symbol)
-            
-            # Always try AI analysis first if model is available
-            if self.model_loaded and self.model:
-                try:
-                    analysis = self.create_ai_analysis(symbol, stock_data, company_info)
-                except Exception as ai_error:
-                    print(f"❌ AI analysis failed, falling back to basic: {ai_error}")
-                    analysis = "❌ AI analysis failed. Showing basic analysis:\n\n" + self.create_basic_analysis(symbol, stock_data, company_info)
-            else:
-                analysis = "⚠️ AI model not available. Showing basic analysis:\n\n" + self.create_basic_analysis(symbol, stock_data, company_info)
-      
-            self.window.after(0, lambda: self.display_stock_analysis(symbol, stock_data, company_info, analysis))
-            
-        except Exception as e:
-            print(f"❌ Error analyzing single stock {symbol}: {e}")
-            traceback.print_exc()
-            logging.error(f"Error analyzing single stock {symbol}: {e}")
-            logging.error(traceback.format_exc())
-            self.window.after(0, lambda: self.display_error(f"{symbol} analysis failed: {str(e)}"))
+        stock_data = self.get_stock_data(symbol)
+        if "error" in stock_data:
+            self.window.after(0, lambda: self.display_error(
+                f"Could not get data for {symbol}: {stock_data['error']}"))
+            return
+
+        company_info = self.get_company_info(symbol)
+
+        # 1) ML sinyali (RandomForest)
+        ml_section = self.create_ml_analysis(symbol)
+
+        # 2) Üstüne LLM yorumu (varsa) ya da temel teknik özet
+        if self.model_loaded and self.model:
+            try:
+                commentary = "COMMENTARY (LLM)\n" + "-" * 40 + "\n"
+                commentary += self.create_ai_analysis(symbol, stock_data)
+            except Exception as ai_error:
+                logging.error(f"AI analysis failed: {ai_error}")
+                commentary = self.create_basic_analysis(symbol, stock_data)
+        else:
+            commentary = self.create_basic_analysis(symbol, stock_data)
+
+        analysis = ml_section + "\n" + commentary
+        self.window.after(0, lambda: self.display_stock_analysis(
+            symbol, stock_data, company_info, analysis))
 
     def analyze_investor_portfolio(self, investor_name, investor_code):
-        try:
-            tickers = get_dataroma_portfolio(investor_code)
-            if not tickers:
-                self.window.after(0, lambda: self.display_error(f"Portfolio not found for {investor_name}"))
-                return
-            
-            portfolio_text = f"📊 PORTFOLIO ANALYSIS: {investor_name.upper()}\n"
-            portfolio_text += "=" * 60 + "\n\n"
-            portfolio_text += f"Found {len(tickers)} holdings:\n\n"
-            
-            for i, ticker in enumerate(tickers[:10], 1): 
-                try:
-                    stock_data = self.get_stock_data(ticker)
-                    if "error" not in stock_data:
-                        change = ((stock_data['c'] - stock_data['pc']) / stock_data['pc']) * 100
-                        portfolio_text += f"{i:2d}. {ticker:5s} - ${stock_data['c']:.2f} ({change:+.1f}%)\n"
-                    else:
-                        portfolio_text += f"{i:2d}. {ticker:5s} - Data not available\n"
-                except:
-                    portfolio_text += f"{i:2d}. {ticker:5s} - Data fetch error\n"
-            
-            portfolio_text += f"\n💡 This portfolio belongs to the famous investor {investor_name}.\n"
-            portfolio_text += "Click on one of the stocks above for detailed AI analysis."
-            
-            self.window.after(0, lambda: self.display_portfolio_analysis(portfolio_text))
-            
-        except Exception as e:
-            print(f"❌ Error analyzing investor portfolio: {e}")
-            traceback.print_exc()
-            logging.error(f"Error analyzing investor portfolio: {e}")
-            logging.error(traceback.format_exc())
-            self.window.after(0, lambda: self.display_error(f"{investor_name} portfolio analysis failed: {str(e)}"))
+        tickers = get_dataroma_portfolio(investor_code)
+        if not tickers:
+            self.window.after(0, lambda: self.display_error(
+                f"Portfolio not found for {investor_name}"))
+            return
 
-    def create_basic_analysis(self, symbol, stock_data, company_info):
-        """AI olmadan temel analiz"""
+        lines = [f"PORTFOLIO: {investor_name.upper()}", "=" * 44, "",
+                 f"{len(tickers)} holdings found", ""]
+
+        for i, ticker in enumerate(tickers[:10], 1):
+            try:
+                stock_data = self.get_stock_data(ticker)
+                if "error" not in stock_data:
+                    change = ((stock_data["c"] - stock_data["pc"]) / stock_data["pc"]) * 100
+                    lines.append(f"{i:2d}. {ticker:6s} ${stock_data['c']:>9.2f}  {change:+.1f}%")
+                else:
+                    lines.append(f"{i:2d}. {ticker:6s} data not available")
+            except Exception:
+                lines.append(f"{i:2d}. {ticker:6s} fetch error")
+
+        lines += ["", "Type one of the symbols above and press Analyze",
+                  "for a detailed ML + LLM analysis."]
+
+        text = "\n".join(lines)
+        self.window.after(0, lambda: self.display_portfolio_analysis(text))
+
+    def create_ml_analysis(self, symbol):
+        """ML sinyal bölümü. Model yoksa ilk çağrıda eğitilir (web ile aynı ml/ paketi)."""
+        if not ML_AVAILABLE:
+            return "ML SIGNAL\n" + "-" * 40 + "\nUnavailable (ml/ module not found)\n"
+        try:
+            s = get_ml_signal(symbol)
+            header = f"ML SIGNAL ({s.get('model_name', 'ML')})\n" + "-" * 40 + "\n"
+            out = header
+            out += f"Signal: {s['signal']}   P(up in 5 days): {s['probability_up']:.1%}"
+            if s.get("proba_baseline") is not None:
+                out += f"   (model baseline: {s['proba_baseline']:.1%})"
+            out += "\n"
+            out += f"RSI(14): {s['rsi_14']:.1f}   SMA5/SMA20: {s['sma_ratio']:.3f}\n"
+            out += f"Model test accuracy: {s['model_test_accuracy']:.1%}   F1: {s['model_test_f1']:.2f}\n"
+            out += f"Data as of: {s['as_of']}\n"
+            if s.get("explanation"):
+                out += "\nWhy " + s["signal"] + "?\n"
+                out += s["explanation"] + "\n"
+            return out
+        except Exception as e:
+            logging.error(f"ML signal failed for {symbol}: {e}")
+            return "ML SIGNAL\n" + "-" * 40 + f"\nCould not compute ({e})\n"
+
+    def create_basic_analysis(self, symbol, stock_data):
         current_price = stock_data["c"]
         previous_close = stock_data["pc"]
-        daily_change = current_price - previous_close
-        daily_change_percent = (daily_change / previous_close) * 100
-        
-        analysis = "📈 BASIC TECHNICAL ANALYSIS:\n"
-        analysis += "-" * 30 + "\n\n"
-        
+        daily_change_percent = ((current_price - previous_close) / previous_close) * 100
+
+        out = "TECHNICAL SUMMARY\n" + "-" * 40 + "\n"
+
         if daily_change_percent > 5:
-            analysis += "🟢 Strong upward momentum (+5% or more)\n"
+            out += "Strong upward momentum (more than +5%)\n"
         elif daily_change_percent > 2:
-            analysis += "🟡 Moderate upward trend (+2% to +5%)\n"
+            out += "Moderate upward trend (+2% to +5%)\n"
         elif daily_change_percent > 0:
-            analysis += "🟢 Slight positive movement\n"
+            out += "Slight positive movement\n"
         elif daily_change_percent > -2:
-            analysis += "🟡 Minor decline (less than -2%)\n"
+            out += "Minor decline (less than -2%)\n"
         elif daily_change_percent > -5:
-            analysis += "🟠 Moderate decline (-2% to -5%)\n"
+            out += "Moderate decline (-2% to -5%)\n"
         else:
-            analysis += "🔴 Significant decline (more than -5%)\n"
-        
-        day_range = stock_data['h'] - stock_data['l']
+            out += "Significant decline (more than -5%)\n"
+
+        day_range = stock_data["h"] - stock_data["l"]
         range_percent = (day_range / current_price) * 100
-        
-        analysis += f"\n📊 Volatility: {range_percent:.1f}% intraday range\n"
+        out += f"Intraday range: {range_percent:.1f}%"
         if range_percent > 5:
-            analysis += "High volatility - Risky for short term\n"
+            out += " (high volatility)\n"
         elif range_percent > 2:
-            analysis += "Moderate volatility - Normal trading\n"
+            out += " (moderate volatility)\n"
         else:
-            analysis += "Low volatility - Stable trading\n"
-        
-        analysis += "\n💡 BASIC RECOMMENDATION:\n"
-        if daily_change_percent > 3:
-            analysis += "⚠️ Consider taking profits if you own shares\n"
-        elif daily_change_percent < -3:
-            analysis += "🔍 May be a buying opportunity if fundamentals are strong\n"
-        else:
-            analysis += "📊 Normal trading - Monitor for trends\n"
-        
-        analysis += "\n⚠️ Note: This is basic technical analysis only.\n"
-        analysis += "For detailed AI-powered fundamental analysis, please load an AI model."
-        
-        return analysis
+            out += " (low volatility)\n"
+
+        return out
 
     def display_stock_analysis(self, symbol, stock_data, company_info, analysis):
-        self.result_text.delete(1.0, tk.END)
-        
-        result = f"🎯 STOCK ANALYSIS: {symbol}\n"
-        result += "=" * 50 + "\n\n"
-        
-        result += f"📋 COMPANY INFORMATION:\n"
-        result += f"Name: {company_info.get('name', 'Unknown')}\n"
-        result += f"Sector: {company_info.get('sector', 'Unknown')}\n"
-        result += f"Industry: {company_info.get('industry', 'Unknown')}\n"
-        result += f"Country: {company_info.get('country', 'Unknown')}\n\n"
-        
-        result += f"💰 PRICE DATA:\n"
-        result += f"Current Price: ${stock_data['c']:.2f}\n"
-        result += f"Previous Close: ${stock_data['pc']:.2f}\n"
-        daily_change = stock_data['c'] - stock_data['pc']
-        daily_change_percent = (daily_change / stock_data['pc']) * 100
-        result += f"Daily Change: ${daily_change:.2f} ({daily_change_percent:+.2f}%)\n"
-        result += f"Day High: ${stock_data['h']:.2f}\n"
-        result += f"Day Low: ${stock_data['l']:.2f}\n\n"
-        
-        if company_info.get('marketCap'):
-            market_cap = company_info['marketCap']
-            if market_cap >= 1e9:
-                result += f"Market Cap: ${market_cap/1e9:.2f}B\n\n"
-            elif market_cap >= 1e6:
-                result += f"Market Cap: ${market_cap/1e6:.2f}M\n\n"
-        
-        result += f"🤖 ANALYSIS:\n"
-        result += "=" * 30 + "\n"
-        result += analysis + "\n\n"
-        
-        result += f"⚡ Analysis completed: {time.strftime('%H:%M:%S')}\n"
-        result += "📈 Use CHART button to see price trends!"
-        
-        self.result_text.insert(tk.END, result)
+        r = f"STOCK ANALYSIS: {symbol}\n"
+        r += "===\n\n"
+
+        r += "COMPANY\n" + "---\n"
+        r += f"Name:     {company_info.get('name', 'Unknown')}\n"
+        r += f"Sector:   {company_info.get('sector', 'Unknown')}\n"
+        r += f"Industry: {company_info.get('industry', 'Unknown')}\n"
+        r += f"Country:  {company_info.get('country', 'Unknown')}\n\n"
+
+        daily_change = stock_data["c"] - stock_data["pc"]
+        daily_change_percent = (daily_change / stock_data["pc"]) * 100
+
+        r += "PRICE\n" + "---\n"
+        r += f"Current:        ${stock_data['c']:.2f}\n"
+        r += f"Previous close: ${stock_data['pc']:.2f}\n"
+        r += f"Daily change:   {daily_change:+.2f} ({daily_change_percent:+.2f}%)\n"
+        r += f"Day high/low:   ${stock_data['h']:.2f} / ${stock_data['l']:.2f}\n"
+        if stock_data.get("v"):
+            r += f"Volume:         {int(stock_data['v']):,}\n"
+        market_cap = company_info.get("marketCap")
+        if market_cap and market_cap >= 1e9:
+            r += f"Market cap:     ${market_cap/1e9:.2f}B\n"
+        elif market_cap and market_cap >= 1e6:
+            r += f"Market cap:     ${market_cap/1e6:.2f}M\n"
+        r += "\n"
+
+        r += analysis + "\n"
+        r += "---\n"
+        r += f"Completed {time.strftime('%H:%M:%S')}. "
+        r += "Use Chart for the last 30 days. Not financial advice.\n"
+
+        self.insert_formatted_text(r)
 
     def display_portfolio_analysis(self, portfolio_text):
-        self.result_text.delete(1.0, tk.END)
-        self.result_text.insert(tk.END, portfolio_text)
+        self.insert_formatted_text(portfolio_text)
 
     def display_error(self, error_message):
-        self.result_text.delete(1.0, tk.END)
-        error_text = f"❌ ERROR\n"
-        error_text += "=" * 30 + "\n\n"
-        error_text += f"{error_message}\n\n"
-        error_text += "💡 TROUBLESHOOTING:\n"
-        error_text += "• Check your internet connection\n"
-        error_text += "• Verify the stock symbol is correct\n"
-        error_text += "• Try a different symbol\n"
-        error_text += "• Wait a moment and try again\n"
-        
-        self.result_text.insert(tk.END, error_text)
+        text = "ERROR\n" + "===\n\n"
+        text += f"{error_message}\n\n"
+        text += "Things to check:\n"
+        text += "- Internet connection\n"
+        text += "- Symbol spelling (e.g. AAPL, not Apple)\n"
+        text += "- Yahoo Finance rate limit: wait a few minutes and retry\n"
+        self.insert_formatted_text(text)
+
+    # ------------------------------------------------------------- Data
 
     def get_stock_data(self, symbol):
+        # ml/data.py'daki çok kaynaklı zincir: Yahoo -> Twelve Data + günlük önbellek
         try:
-            stock = yf.Ticker(symbol)
-            hist = stock.history(period="2d")
-            if hist.empty:
-                return {"error": "Data not available"}
-            return {
-                "c": hist["Close"].iloc[-1],
-                "pc": hist["Close"].iloc[-2] if len(hist) > 1 else hist["Close"].iloc[-1],
-                "h": hist["High"].iloc[-1],
-                "l": hist["Low"].iloc[-1],
-            }
+            from data import get_quote
+            q = get_quote(symbol)
+            return {"c": q["price"], "pc": q["previous_close"],
+                    "h": q["high"], "l": q["low"], "v": q["volume"]}
         except Exception as e:
             logging.error(f"Error fetching stock data for {symbol}: {e}")
             return {"error": str(e)}
 
     def get_company_info(self, symbol):
+        # fundamentals.py zinciri: Yahoo müsaitse Yahoo, değilse Finnhub
         try:
-            stock = yf.Ticker(symbol)
-            info = stock.info or {}
+            from fundamentals import get_company_info as fetch_info
+            info = fetch_info(symbol)
             return {
-                "name": info.get("shortName", info.get("longName", symbol)),
-                "industry": info.get("industry", "Unknown"),
-                "sector": info.get("sector", "Unknown"),
-                "country": info.get("country", "Unknown"),
-                "marketCap": info.get("marketCap", 0),
+                "name": info["name"] or symbol,
+                "industry": info["industry"],
+                "sector": info["sector"],
+                "country": info["country"],
+                "marketCap": info["market_cap"] or 0,
             }
         except Exception as e:
             logging.error(f"Error fetching company info for {symbol}: {e}")
-            return {
-                "name": symbol,
-                "industry": "Unknown",
-                "sector": "Unknown",
-                "country": "Unknown",
-                "marketCap": 0,
-            }
+            return {"name": symbol, "industry": "Unknown", "sector": "Unknown",
+                    "country": "Unknown", "marketCap": 0}
 
-    def create_ai_analysis(self, symbol, data, company_info):
+    def create_ai_analysis(self, symbol, data):
         current_price = data["c"]
-        previous_close = data["pc"]
-        daily_change = current_price - previous_close
-        daily_change_percent = (daily_change / previous_close) * 100
-        
-        # Shorter, more focused prompt to prevent crashes
-        prompt = f"""YOU ARE A FINANCIAL ANALYST AI. GIVE A DETAILED ANALYSIS OF THE STOCK MARKET DATA BELOW. DONT USE TOO MUCH JARGON, BE CONCISE AND TO THE POINT.
+        daily_change_percent = ((current_price - data["pc"]) / data["pc"]) * 100
+
+        prompt = f"""You are a financial analyst. Write a short, plain-language analysis of this stock. Be concise, avoid jargon.
 
 Stock: {symbol}
 Price: ${current_price:.2f}
@@ -843,171 +983,115 @@ Change: {daily_change_percent:+.1f}%
 High: ${data['h']:.2f}
 Low: ${data['l']:.2f}
 
-Give a short analysis and recommendation (BUY/HOLD/SELL):"""
+Short analysis and a one-word stance (BUY/HOLD/SELL):"""
 
-        try:
-            if not self.model or not self.model_loaded:
-                return self.create_basic_analysis(symbol, data, company_info)
-            
-            print(f"🤖 Starting AI analysis: {symbol}")
-            logging.info(f"Starting AI analysis for {symbol}")
-            
-            # Use more conservative settings to prevent crashes
-            response = self.model.generate(
-                prompt, 
-                max_tokens=200,  # Reduced from 400
-                temp=0.1,        # Lower temperature for stability
-                top_p=0.8,       # More conservative
-                repeat_penalty=1.05,  # Reduced
-                 # Single thread for stability
-            )
-            
-            analysis = response.strip()
-            if not analysis or len(analysis) < 10:
-                logging.warning("AI response too short, falling back to basic analysis")
-                return f"❌ AI response incomplete!\n\n{self.create_basic_analysis(symbol, data, company_info)}"
-            
-            print(f"✅ AI analysis completed: {len(analysis)} characters")
-            logging.info(f"AI analysis completed successfully: {len(analysis)} characters")
-            return analysis
-            
-        except Exception as e:
-            print(f"❌ Error generating AI analysis: {e}")
-            traceback.print_exc()
-            logging.error(f"Error generating AI analysis: {e}")
-            logging.error(traceback.format_exc())
-            return f"❌ AI Analysis Error: {str(e)}\n\n{self.create_basic_analysis(symbol, data, company_info)}"
+        response = self.model.generate(
+            prompt, max_tokens=200, temp=0.1, top_p=0.8, repeat_penalty=1.05,
+        )
+        analysis = response.strip()
+        if len(analysis) < 10:
+            raise ValueError("LLM response too short")
+        return analysis + "\n"
+
+    # ------------------------------------------------------------- Chart
 
     def plot_stock_price(self, symbol):
         if not symbol:
-            messagebox.showwarning("Warning", "Enter a stock symbol first!")
+            messagebox.showwarning("Missing input", "Enter a stock symbol first.")
             return
-        
+
         try:
             import matplotlib.pyplot as plt
             import matplotlib.dates as mdates
-            plt.style.use('dark_background')
-            
-            stock = yf.Ticker(symbol.upper())
-            hist = stock.history(period="1mo")
-            
+
+            try:
+                from data import fetch_history
+                hist = fetch_history(symbol.upper(), period="1mo")
+            except ImportError:
+                hist = yf.Ticker(symbol.upper()).history(period="1mo")
             if hist.empty:
                 messagebox.showerror("Error", f"No data found for {symbol}")
                 return
-            
-            fig, ax = plt.subplots(figsize=(12, 7))
-            
-            ax.plot(hist.index, hist['Close'], linewidth=3, color='#00D084', alpha=0.8, label='Close Price')
-            ax.fill_between(hist.index, hist['Close'], alpha=0.2, color='#00D084')
-            
-            ax2 = ax.twinx()
-            ax2.bar(hist.index, hist['Volume'], alpha=0.3, color='#3742FA', label='Volume')
-            ax2.set_ylabel('Volume', color='#3742FA')
-            
-            ax.set_title(f'{symbol.upper()} Stock Price & Volume - Last 30 Days', 
-                        fontsize=16, fontweight='bold', pad=20, color='white')
-            ax.set_xlabel('Date', fontsize=12, color='white')
-            ax.set_ylabel('Price ($)', fontsize=12, color='white')
-            ax.grid(True, alpha=0.3, linestyle='--')
-            
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
-            ax.xaxis.set_major_locator(mdates.WeekdayLocator())
-            plt.xticks(rotation=45)
-            
-            current_price = hist['Close'].iloc[-1]
-            ax.annotate(f'${current_price:.2f}', 
-                       xy=(hist.index[-1], current_price),
-                       xytext=(10, 10), textcoords='offset points',
-                       bbox=dict(boxstyle='round,pad=0.3', fc='#00D084', alpha=0.8),
-                       fontsize=12, fontweight='bold', color='white')
-            
-            plt.tight_layout()
+
+            import matplotlib.ticker as mticker
+
+            first_close = hist["Close"].iloc[0]
+            last_close  = hist["Close"].iloc[-1]
+            line_color  = C["gain"] if last_close >= first_close else C["loss"]
+
+            fig, (ax, ax_vol) = plt.subplots(
+                2, 1, figsize=(11, 6.5),
+                gridspec_kw={"height_ratios": [3, 1], "hspace": 0.06}
+            )
+            fig.patch.set_facecolor(C["panel"])
+
+            for a in (ax, ax_vol):
+                a.set_facecolor(C["panel"])
+                a.spines["top"].set_visible(False)
+                a.spines["right"].set_visible(False)
+                a.spines["left"].set_color(C["border"])
+                a.spines["bottom"].set_color(C["border"])
+                a.tick_params(colors=C["dim"], labelsize=9)
+                a.grid(True, linestyle=":", alpha=0.5, color=C["border"])
+
+            # Price area with subtle fill
+            ax.plot(hist.index, hist["Close"],
+                    linewidth=2.5, color=line_color, zorder=3)
+            ax.fill_between(hist.index, hist["Close"],
+                            alpha=0.08, color=line_color)
+
+            ax.set_title(f"{symbol.upper()}  —  Last 30 Days",
+                         fontsize=12, fontweight="bold",
+                         color=C["text"], pad=14, loc="left")
+            ax.set_ylabel("Price (USD)", color=C["dim"], fontsize=9)
+            ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("$%.0f"))
+            ax.set_xticklabels([])
+
+            # Volume subplot
+            vol_color = [C["gain"] if c >= o else C["loss"]
+                         for c, o in zip(hist["Close"], hist["Open"])]
+            ax_vol.bar(hist.index, hist["Volume"],
+                       color=vol_color, alpha=0.35, width=0.8)
+            ax_vol.set_ylabel("Volume", color=C["dim"], fontsize=8)
+            ax_vol.yaxis.set_major_formatter(
+                mticker.FuncFormatter(lambda x, _: f"{x/1e6:.1f}M"))
+            ax_vol.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+            ax_vol.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=0))
+            plt.setp(ax_vol.get_xticklabels(), rotation=30, ha="right")
+
+            # Current price annotation
+            current_price = hist["Close"].iloc[-1]
+            ax.annotate(
+                f"${current_price:.2f}",
+                xy=(hist.index[-1], current_price),
+                xytext=(-60, 10), textcoords="offset points",
+                bbox=dict(boxstyle="round,pad=0.4", fc=line_color,
+                          ec="none", alpha=0.92),
+                fontsize=10, fontweight="bold", color="#FFFFFF"
+            )
+
+            fig.tight_layout()
             plt.show()
-            
-        except ImportError:
-            messagebox.showerror("Error", "Matplotlib library required for charts.\n\nInstall with: pip install matplotlib")
+
         except Exception as e:
             logging.error(f"Error creating chart: {e}")
-            messagebox.showerror("Error", f"Could not create chart for {symbol}: {str(e)}")
+            messagebox.showerror("Error", f"Could not create chart for {symbol}: {e}")
 
     def run(self):
-        try:
-            print("🚀 Starting main application loop...")
-            self.window.mainloop()
-        except KeyboardInterrupt:
-            print("\n🛑 Application interrupted by user")
-        except Exception as e:
-            print(f"❌ Error in main loop: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            print("👋 Application main loop ended")
+        self.window.mainloop()
 
 
 if __name__ == "__main__":
     try:
-        print("🚀 Starting Stock Analyzer...")
-        print("📦 Checking dependencies...")
-        
-        # Check critical imports
-        try:
-            import tkinter as tk
-            print("✅ Tkinter OK")
-        except ImportError as e:
-            print(f"❌ Tkinter missing: {e}")
-            input("Press Enter to exit...")
-            sys.exit(1)
-            
-        try:
-            import yfinance as yf
-            print("✅ YFinance OK")
-        except ImportError as e:
-            print(f"❌ YFinance missing. Install with: pip install yfinance")
-            print(f"Error: {e}")
-            input("Press Enter to exit...")
-            sys.exit(1)
-            
-        try:
-            from bs4 import BeautifulSoup
-            print("✅ BeautifulSoup OK")
-        except ImportError as e:
-            print(f"❌ BeautifulSoup missing. Install with: pip install beautifulsoup4")
-            print(f"Error: {e}")
-            input("Press Enter to exit...")
-            sys.exit(1)
-            
-        try:
-            import requests
-            print("✅ Requests OK")
-        except ImportError as e:
-            print(f"❌ Requests missing. Install with: pip install requests")
-            print(f"Error: {e}")
-            input("Press Enter to exit...")
-            sys.exit(1)
-
-        print("🚀 All dependencies OK, starting application...")
-        
+        print("[INFO] Starting Veriss Stock Analyzer...")
         app = StockAnalyzer()
-        print("✅ Application initialized successfully")
         app.run()
-        
     except KeyboardInterrupt:
-        print("\n🛑 Application stopped by user")
+        print("[INFO] Stopped by user")
     except Exception as e:
-        error_msg = f"❌ Critical error starting application: {e}"
-        print(error_msg)
-        print(f"Error type: {type(e).__name__}")
-        import traceback
-        print("Full traceback:")
+        print(f"[ERROR] Critical error: {e}")
         traceback.print_exc()
-        logging.error(error_msg)
-        logging.error(traceback.format_exc())
-        print("\n💡 Common solutions:")
-        print("1. Make sure all dependencies are installed:")
-        print("   pip install gpt4all yfinance beautifulsoup4 requests matplotlib")
-        print("2. Check your Python version (3.7+ required)")
-        print("3. Try running as administrator")
-        print("4. Check if any antivirus is blocking the app")
+        logging.error(f"Critical error: {e}\n{traceback.format_exc()}")
         input("\nPress Enter to exit...")
     finally:
-        print("👋 Application closed")
+        print("[INFO] Application closed")
