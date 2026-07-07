@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veriss — ML stock signals, honestly measured</title>
+<meta name="description" content="Veriss trains a model per stock, explains every BUY/HOLD/SELL in plain English, and backtests with transaction costs included.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="landing.css">
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/">
+    <img src="greek_coin_logo.jpg" alt="Veriss coin logo">
+    <span>Veriss</span>
+  </a>
+  <div class="nav-links">
+    <a href="#how">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#faq">FAQ</a>
+    <a href="https://github.com/EmreGneri/Veriss-Stock-Analyzer" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <a class="btn btn-primary nav-cta" href="/app">Open App</a>
+</nav>
+
+<header class="hero">
+  <div class="hero-copy">
+    <h1>Stock signals, honestly&nbsp;measured.</h1>
+    <p class="hero-sub">
+      One model per stock. Every call explained. Backtested with real costs — not hype.
+    </p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary btn-lg" href="/app">Open the app</a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/EmreGneri/Veriss-Stock-Analyzer" target="_blank" rel="noopener">Read the code</a>
+    </div>
+    <p class="hero-note">Free, open source, runs on your machine.</p>
+  </div>
+
+  <!-- İmzalık: mouse'a göre eğilen, yavaş dönen 3D Veriss parası -->
+  <div class="coin-stage" aria-hidden="true">
+    <div class="coin-float">
+      <div class="coin-3d" id="coin">
+        <svg class="coin-face front" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="cf-field" cx="38%" cy="32%" r="75%">
+              <stop offset="0" stop-color="#6ee7b7"/>
+              <stop offset="0.45" stop-color="#10b981"/>
+              <stop offset="1" stop-color="#065f46"/>
+            </radialGradient>
+            <linearGradient id="cf-rim" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#a7f3d0"/>
+              <stop offset="0.5" stop-color="#059669"/>
+              <stop offset="1" stop-color="#064e3b"/>
+            </linearGradient>
+            <path id="cf-toparc" d="M 46 100 A 54 54 0 0 1 154 100" fill="none"/>
+          </defs>
+          <circle cx="100" cy="100" r="98" fill="url(#cf-rim)"/>
+          <circle cx="100" cy="100" r="88" fill="url(#cf-field)"/>
+          <circle cx="100" cy="100" r="82" fill="none" stroke="#064e3b" stroke-width="1.5" opacity="0.5"/>
+          <text class="coin-arc" x="100"><textPath href="#cf-toparc" startOffset="50%">VERISS</textPath></text>
+          <text class="coin-mono" x="100" y="126">V</text>
+          <g fill="#d1fae5" opacity="0.85">
+            <circle cx="78" cy="150" r="2.4"/><circle cx="100" cy="154" r="2.4"/><circle cx="122" cy="150" r="2.4"/>
+          </g>
+          <path d="M56 108 q10 22 30 30" fill="none" stroke="#d1fae5" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+          <path d="M144 108 q-10 22 -30 30" fill="none" stroke="#d1fae5" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+          <ellipse cx="74" cy="66" rx="34" ry="20" fill="#ffffff" opacity="0.16" transform="rotate(-24 74 66)"/>
+        </svg>
+        <svg class="coin-face back" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="cb-field" cx="38%" cy="32%" r="75%">
+              <stop offset="0" stop-color="#6ee7b7"/>
+              <stop offset="0.45" stop-color="#10b981"/>
+              <stop offset="1" stop-color="#065f46"/>
+            </radialGradient>
+            <path id="cb-toparc" d="M 40 100 A 60 60 0 0 1 160 100" fill="none"/>
+          </defs>
+          <circle cx="100" cy="100" r="98" fill="url(#cf-rim)"/>
+          <circle cx="100" cy="100" r="88" fill="url(#cb-field)"/>
+          <circle cx="100" cy="100" r="82" fill="none" stroke="#064e3b" stroke-width="1.5" opacity="0.5"/>
+          <text class="coin-arc small" x="100"><textPath href="#cb-toparc" startOffset="50%">HONESTLY MEASURED</textPath></text>
+          <text class="coin-mono" x="100" y="122">$</text>
+          <path d="M64 150 L82 140 L100 145 L118 132 L136 138" fill="none" stroke="#d1fae5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+          <ellipse cx="74" cy="66" rx="34" ry="20" fill="#ffffff" opacity="0.16" transform="rotate(-24 74 66)"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="facts" aria-label="Technical facts">
+  <span>14 ratio-based indicators</span>
+  <span>Model race per symbol</span>
+  <span>Yahoo → Twelve Data failover</span>
+  <span>Costs-included backtests</span>
+</section>
+
+<section class="how" id="how">
+  <h2>Four steps, ticker to verdict</h2>
+  <ol class="steps">
+    <li>
+      <span class="step-n">1</span>
+      <h3>Search a symbol</h3>
+      <p>A ticker or an investor's name.</p>
+    </li>
+    <li>
+      <span class="step-n">2</span>
+      <h3>A model trains for it</h3>
+      <p>Fresh, on five years of daily data.</p>
+    </li>
+    <li>
+      <span class="step-n">3</span>
+      <h3>Signal, with reasons</h3>
+      <p>BUY / HOLD / SELL, and why.</p>
+    </li>
+    <li>
+      <span class="step-n">4</span>
+      <h3>Judge it by the backtest</h3>
+      <p>Returns, Sharpe, drawdown. Costs in.</p>
+    </li>
+  </ol>
+</section>
+
+<section class="features" id="features">
+  <h2>Built like production software,<br>priced like a student project</h2>
+
+  <div class="bento">
+    <article class="tile tile-wide">
+      <h3>It explains itself</h3>
+      <p>Every signal ships with a plain-English rationale — a real one:</p>
+      <blockquote>
+        "8 points below this model's own typical estimate, which is what
+        triggers the SELL… treat it as one weak input, not trading advice."
+      </blockquote>
+    </article>
+
+    <article class="tile">
+      <h3>Survives outages</h3>
+      <p>Yahoo → Twelve Data → Finnhub failover, with health probes and caches.</p>
+    </article>
+
+    <article class="tile">
+      <h3>Honest backtesting</h3>
+      <p class="stat-line"><strong>+8.3%</strong> vs <strong>+35%</strong> buy&nbsp;&amp;&nbsp;hold — but half the drawdown, and we print it.</p>
+    </article>
+
+    <article class="tile">
+      <h3>Local LLM, optional</h3>
+      <p>Drop in a <code>.gguf</code> and a local Llama comments. No API bills.</p>
+    </article>
+
+    <article class="tile">
+      <h3>One engine, two faces</h3>
+      <p>The same <code>ml/</code> package runs the web and desktop apps.</p>
+    </article>
+  </div>
+</section>
+
+<section class="faq" id="faq">
+  <h2>Fair questions</h2>
+  <details>
+    <summary>Is this financial advice?</summary>
+    <p>No. It's an educational tool. The model's test accuracy hovers around
+    50% — barely above coin-flip, which is normal for daily price data. Veriss
+    tells you that on every result instead of hiding it.</p>
+  </details>
+  <details>
+    <summary>Where does the data come from?</summary>
+    <p>Prices from Yahoo Finance with automatic Twelve Data failover; company
+    fundamentals from Yahoo with Finnhub failover; investor portfolios scraped
+    from Dataroma. Everything is cached daily on disk.</p>
+  </details>
+  <details>
+    <summary>Why doesn't it beat buy &amp; hold?</summary>
+    <p>Because almost nothing does with daily technical data — and tools that
+    claim otherwise are selling you something. Veriss's value is a leak-free
+    pipeline: chronological splits, next-day execution, costs included.</p>
+  </details>
+  <details>
+    <summary>Can I run it myself?</summary>
+    <p>Yes — it's MIT-licensed Python. Clone the repo, <code>pip install -r
+    requirements.txt</code>, add two free API keys, and both the web and
+    desktop apps run locally.</p>
+  </details>
+</section>
+
+<section class="cta-band">
+  <h2>See it run.</h2>
+  <p>Type a ticker. Watch a model train for it. Read why it decided.</p>
+  <a class="btn btn-invert btn-lg" href="/app">Open the app</a>
+</section>
+
+<footer>
+  <span>MIT License</span>
+  <span class="foot-sep" aria-hidden="true">·</span>
+  <a href="https://github.com/EmreGneri/Veriss-Stock-Analyzer" target="_blank" rel="noopener">GitHub</a>
+  <span class="foot-sep" aria-hidden="true">·</span>
+  <span>Built by Emre Güneri, Ankara</span>
+</footer>
+
+<script>
+  // 3D para: yavaş otomatik dönüş (Y ekseni) + imlece göre eğilme (X/Y).
+  // Hedef açılara doğru yumuşak lerp; her kare requestAnimationFrame.
+  (function () {
+    const coin = document.getElementById("coin");
+    if (!coin) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let targetX = 0, targetY = 0, curX = 0, curY = -18, autoY = 0;
+
+    window.addEventListener("pointermove", function (e) {
+      const nx = e.clientX / window.innerWidth - 0.5;   // -0.5 .. 0.5
+      const ny = e.clientY / window.innerHeight - 0.5;
+      targetY = nx * 55;    // yatay imleç → Y ekseni eğim
+      targetX = -ny * 32;   // dikey imleç → X ekseni eğim
+    }, { passive: true });
+
+    if (reduce) {
+      coin.style.transform = "rotateX(6deg) rotateY(-18deg)";
+      return;
+    }
+
+    (function frame() {
+      autoY += 0.28;                       // sürekli yavaş dönüş
+      curX += (targetX - curX) * 0.08;     // yumuşak takip
+      curY += (targetY - curY) * 0.08;
+      coin.style.transform =
+        "rotateX(" + curX.toFixed(2) + "deg) rotateY(" + (curY + autoY).toFixed(2) + "deg)";
+      requestAnimationFrame(frame);
+    })();
+  })();
+</script>
+
+</body>
+</html>
