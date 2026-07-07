@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -19,6 +20,7 @@ sys.path.insert(0, os.path.join(ROOT, "ml"))
 
 import yfinance as yf
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from investors import resolve_investor, get_dataroma_portfolio
@@ -145,15 +147,18 @@ def _portfolio_response(name: str, investor_code: str):
     if not tickers:
         raise HTTPException(status_code=404, detail=f"Portfolio not found for {name}")
 
-    holdings = []
-    for ticker in tickers[:10]:
+    def build_holding(ticker):
         try:
-            q = _quote(ticker)
+            q = get_quote(ticker)
             change_pct = ((q["price"] - q["previous_close"]) / q["previous_close"]) * 100
-            holdings.append({"symbol": ticker, "price": q["price"],
-                             "change_pct": round(change_pct, 2)})
-        except Exception:
-            holdings.append({"symbol": ticker, "price": None, "change_pct": None})
+            return {"symbol": ticker, "price": q["price"],
+                    "change_pct": round(change_pct, 2)}
+        except Exception as e:
+            logging.warning(f"portfolio quote failed for {ticker}: {e}")
+            return {"symbol": ticker, "price": None, "change_pct": None}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        holdings = list(pool.map(build_holding, tickers[:10]))
 
     return {"type": "portfolio", "investor": name.title(), "holdings": holdings}
 
@@ -180,11 +185,7 @@ def sample_portfolio():
     tickers = get_dataroma_portfolio("BRK") or [
         "AAPL", "AXP", "BAC", "KO", "CVX", "OXY", "MCO", "KHC", "CB", "DVA", "V", "AMZN"
     ]
-    rows = []
-    # 8 hisse: Twelve Data ücretsiz planının dakikalık limiti (8 istek/dk) ile uyumlu.
-    for ticker in tickers[:8]:
-        # Fiyat: çok kaynaklı zincir (Yahoo yoksa Twelve Data). P/E ve piyasa
-        # değeri yalnızca Yahoo'dan gelir; Yahoo kapalıyken N/A kalır.
+    def build_row(ticker):
         price = None
         try:
             price = get_quote(ticker)["price"]
@@ -193,16 +194,29 @@ def sample_portfolio():
 
         fund = get_company_info(ticker)
         cap = fund["market_cap"]
-
-        rows.append({
+        return {
             "symbol": ticker,
             "name": (fund["name"] or ticker)[:24],
             "price": price,
             "pe": fund["pe"],
             "market_cap_b": round(cap / 1e9, 2) if cap and cap >= 1e9 else None,
-        })
+        }
+
+    # 8 hisse sırayla çekildiğinde soğuk önbellekte ~10-20 sn sürüyordu;
+    # paralel çekim bunu tek istek süresine indirir. 8 işçi, Twelve Data'nın
+    # dakikalık 8 istek limitiyle de uyumlu.
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        rows = list(pool.map(build_row, tickers[:8]))
     return {"holdings": rows}
 
 
-app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"),
-                           html=True), name="static")
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+
+@app.get("/app", include_in_schema=False)
+def app_page():
+    """Analiz aracı; kök URL tanıtım (landing) sayfasını sunar."""
+    return FileResponse(os.path.join(_STATIC_DIR, "app.html"))
+
+
+app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
