@@ -7,3 +7,5 @@ models/
 stock_analyzer.log
 twelvedata_key.txt
 finnhub_key.txt
+.env
+.claude/
