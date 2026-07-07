@@ -1,68 +1,71 @@
 # Veriss Stock Analyzer
 
-Veriss Stock Analyzer is a desktop app that helps you analyze stock data and see what top investors like Warren Buffett are holding. It's simple, clean, and powered by a local AI model (GPT4All).
+Stock analysis tool with a trained ML model behind it. Started as a GPT4All prompt
+experiment, rewrote it with a proper pipeline: technical indicator features, model
+training with chronological splits, backtesting with transaction costs, and both a
+desktop (Tkinter) and web (FastAPI) interface on top of the same code.
 
-## What it does
+## Features
 
-- Shows real-time stock data like price, change, volume, and more
-- Uses a local GPT4All model to give simple investment advice (Buy, Hold, or Sell)
-- Lets you explore famous investors’ portfolios from Dataroma
-- Plots 30-day stock price charts
-- Runs on a modern desktop interface built with Tkinter
+- BUY / HOLD / SELL signal from a model trained on 5 years of daily data per symbol,
+  with a written explanation of why the signal was produced
+- Live price data with automatic failover: Yahoo Finance -> Twelve Data
+- Company fundamentals (sector, market cap, P/E) with Yahoo -> Finnhub failover
+- Famous investor portfolios scraped from Dataroma (Warren Buffett, Michael Burry...)
+- Price charts, interactive on the web version (5D/1M/3M/6M/1Y)
+- Optional local LLM commentary (GPT4All) if a .gguf model is present
 
-## Getting started
+## ML pipeline (`ml/`)
 
-### 1. Clone the project
+- `data.py` - price fetching with provider failover + daily disk cache
+- `features.py` - 14 indicators (momentum, RSI, MACD, Bollinger z-score, volume ratios...).
+  All ratio-based, no raw price levels, so the model can't memorize price regimes.
+- `labels.py` - target: will close rise >=1% within 5 trading days
+- `train.py` - RandomForest vs HistGradientBoosting, winner picked on a chronological
+  validation slice (never on the test set). Train/test split is chronological too.
+- `backtest.py` - strategy vs buy & hold with 0.1% transaction cost per trade,
+  Sharpe ratio and max drawdown included
+- `predict.py` - live signal. Thresholds are relative to the model's own recent
+  probability median, because raw RF probabilities are uncalibrated and a fixed
+  0.5-style cutoff produced SELL almost every day.
+
+Honest results (AAPL test year): the strategy returned +8% vs +35% for buy & hold in
+a strong bull year, but with a smaller max drawdown (-9% vs -14%) while being in the
+market only ~20% of days. Daily-bar technical models don't beat buy & hold and this
+project doesn't pretend otherwise - the point is the pipeline being leak-free and
+honestly measured.
+
+## Setup
 
 ```
 git clone https://github.com/EmreGneri/Veriss-Stock-Analyzer.git
 cd Veriss-Stock-Analyzer
-```
-
-### 2. Install the required libraries
-
-```
+python -m venv venv
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Add a GPT4All model
+API keys (both free, both optional but recommended):
 
-- Download a .gguf model from: https://gpt4all.io
-  - Suggested models:
-    - mistral-7b-openorca.Q4_0.gguf
-    - orca-mini-3b-gguf2-q4_0.gguf
+- Twelve Data (price fallback): https://twelvedata.com -> paste key into `twelvedata_key.txt`
+- Finnhub (fundamentals fallback): https://finnhub.io -> paste key into `finnhub_key.txt`
 
-- Create a folder named `models` in the project root
-- Put your downloaded .gguf file inside that folder
-
-### 4. Run the application
+## Run
 
 ```
-python stockanalyzer.py
+python ml/backtest.py AAPL         # train + backtest, saves chart to reports/
+python stockanalyzer.py            # desktop app
+run_web.bat                        # web app -> http://127.0.0.1:8000
 ```
 
-## Example inputs
+First analysis of a new symbol trains a model, takes about a minute.
 
-- Stock symbols: AAPL, MSFT, TSLA
-- Investor names: Warren Buffett, Bill Gates, Michael Burry
+For LLM commentary: `pip install gpt4all` and drop a .gguf file into `models/`.
 
-## Folder structure
+## Disclaimer
 
-```
-Veriss-Stock-Analyzer/
-├── stockanalyzer.py
-├── requirements.txt
-├── README.md
-└── models/
-    └── mistral-7b-openorca.Q4_0.gguf
-```
-
-## Notes
-
-- The app can work without a model file, but AI analysis will be disabled
-- The AI model runs locally – no internet needed for analysis
-- You can package this into a Windows executable using tools like PyInstaller
+Educational project, not financial advice.
 
 ## License
 
-MIT – Free to use, modify, and share.
+MIT
