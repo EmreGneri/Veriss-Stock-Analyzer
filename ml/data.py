@@ -9,6 +9,13 @@ import yfinance as yf
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "data_cache")
 
+# API anahtarlari .env dosyasindan da okunabilsin (txt dosyalari yedek olarak kalir)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(ROOT_DIR, ".env"))
+except ImportError:
+    pass
+
 YAHOO_COOLDOWN = 600  # saniye; ilk hatadan sonra Yahoo bu süre atlanır
 _yahoo_down_until = 0.0
 
@@ -18,8 +25,31 @@ PERIOD_DAYS = {
 }
 
 
+_probe_done = False
+
+
 def yahoo_available() -> bool:
-    return time.time() >= _yahoo_down_until
+    """Yahoo kullanılabilir mi? Süreçteki ilk çağrıda 4 sn'lik hızlı bir sağlık
+    yoklaması yapılır; Yahoo bloklu ise (429 vb.) 30-90 sn'lik yfinance zaman
+    aşımlarını hiç yaşamadan doğrudan cooldown'a geçilir."""
+    global _probe_done
+    if time.time() < _yahoo_down_until:
+        return False
+    if not _probe_done:
+        _probe_done = True
+        try:
+            r = requests.get(
+                "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=1d&interval=1d",
+                timeout=4,
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            if r.status_code != 200:
+                _mark_yahoo_down()
+                return False
+        except Exception:
+            _mark_yahoo_down()
+            return False
+    return True
 
 
 def _mark_yahoo_down():
